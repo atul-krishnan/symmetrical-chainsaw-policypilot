@@ -12,8 +12,12 @@ export async function writeRequestAuditLog(input: {
   statusCode: number;
   errorCode?: string;
   metadata?: Record<string, unknown>;
+  expectOrgContext?: boolean;
 }): Promise<void> {
-  if (!input.orgId) {
+  const shouldLogMissingOrgContext =
+    !input.orgId && (input.expectOrgContext ?? input.route.startsWith("/api/orgs/"));
+
+  if (shouldLogMissingOrgContext) {
     logInfo("request_audit_log_missing_org_context", {
       request_id: input.requestId,
       route: input.route,

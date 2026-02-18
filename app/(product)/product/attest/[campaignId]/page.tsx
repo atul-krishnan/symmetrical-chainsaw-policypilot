@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -31,18 +32,26 @@ async function getToken(): Promise<string | null> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  let token = data.session?.access_token ?? null;
+  if (token) {
+    return token;
+  }
+
+  const refresh = await supabase.auth.refreshSession();
+  token = refresh.data.session?.access_token ?? null;
+  return token;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function AttestPage({
-  params,
-}: {
-  params: { campaignId: string };
-}) {
+export default function AttestPage() {
+  const params = useParams<{ campaignId: string }>();
+  const campaignId = Array.isArray(params.campaignId)
+    ? params.campaignId[0] ?? ""
+    : params.campaignId ?? "";
+
   const [loading, setLoading] = useState(true);
   const [campaign, setCampaign] = useState<CampaignInfo | null>(null);
   const [name, setName] = useState("");
@@ -53,6 +62,12 @@ export default function AttestPage({
 
   // Load campaign summary + completion status
   const loadCampaign = useCallback(async () => {
+    if (!campaignId) {
+      setError("Campaign id is missing.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const token = await getToken();
     if (!token) {
@@ -75,7 +90,7 @@ export default function AttestPage({
 
       const all = (body.items ?? []).filter(
         (a: { module: { campaignId: string } }) =>
-          a.module.campaignId === params.campaignId,
+          a.module.campaignId === campaignId,
       );
 
       const completed = all.filter(
@@ -83,7 +98,7 @@ export default function AttestPage({
       );
 
       setCampaign({
-        id: params.campaignId,
+        id: campaignId,
         name: all.length > 0 ? "Campaign Training" : "Campaign",
         totalModules: all.length,
         completedModules: completed.length,
@@ -93,7 +108,7 @@ export default function AttestPage({
     } finally {
       setLoading(false);
     }
-  }, [params.campaignId]);
+  }, [campaignId]);
 
   useEffect(() => {
     void loadCampaign();
@@ -102,6 +117,12 @@ export default function AttestPage({
   const submitAttestation = useCallback(async () => {
     setError(null);
     setSubmitting(true);
+
+    if (!campaignId) {
+      setError("Campaign id is missing.");
+      setSubmitting(false);
+      return;
+    }
 
     const token = await getToken();
     if (!token) {
@@ -112,7 +133,7 @@ export default function AttestPage({
 
     try {
       const res = await fetch(
-        `/api/me/campaigns/${params.campaignId}/attest`,
+        `/api/me/campaigns/${campaignId}/attest`,
         {
           method: "POST",
           headers: {
@@ -139,7 +160,7 @@ export default function AttestPage({
     } finally {
       setSubmitting(false);
     }
-  }, [name, params.campaignId]);
+  }, [campaignId, name]);
 
   // -----------------------------------------------------------------------
   // Render

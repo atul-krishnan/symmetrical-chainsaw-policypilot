@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   BookOpenCheck,
@@ -63,11 +64,12 @@ const TRACK_LABEL: Record<string, string> = {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function AssignmentPage({
-  params,
-}: {
-  params: { assignmentId: string };
-}) {
+export default function AssignmentPage() {
+  const params = useParams<{ assignmentId: string }>();
+  const assignmentId = Array.isArray(params.assignmentId)
+    ? params.assignmentId[0] ?? ""
+    : params.assignmentId ?? "";
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DetailResponse | null>(null);
@@ -90,7 +92,12 @@ export default function AssignmentPage({
     }
 
     const { data: session } = await supabase.auth.getSession();
-    const token = session.session?.access_token;
+    let token = session.session?.access_token;
+    if (!token) {
+      const refresh = await supabase.auth.refreshSession();
+      token = refresh.data.session?.access_token ?? undefined;
+    }
+
     if (!token) {
       setError("Sign in to view this module.");
       setLoading(false);
@@ -98,7 +105,12 @@ export default function AssignmentPage({
     }
 
     try {
-      const res = await fetch(`/api/me/assignments/${params.assignmentId}`, {
+      if (!assignmentId) {
+        setError("Assignment id is missing.");
+        return;
+      }
+
+      const res = await fetch(`/api/me/assignments/${assignmentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const body = await res.json();
@@ -113,7 +125,7 @@ export default function AssignmentPage({
     } finally {
       setLoading(false);
     }
-  }, [params.assignmentId]);
+  }, [assignmentId]);
 
   useEffect(() => {
     void loadDetail();

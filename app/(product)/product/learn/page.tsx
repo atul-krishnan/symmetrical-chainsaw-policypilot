@@ -88,7 +88,12 @@ export default function LearnInboxPage() {
     }
 
     const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    let token = data.session?.access_token;
+    if (!token) {
+      const refresh = await supabase.auth.refreshSession();
+      token = refresh.data.session?.access_token ?? undefined;
+    }
+
     if (!token) {
       setError("Sign in before viewing assignments.");
       setLoading(false);

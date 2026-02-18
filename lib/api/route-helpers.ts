@@ -29,15 +29,26 @@ export async function withApiHandler<T>(
   } catch (error) {
     const latency = Date.now() - context.startedAt;
     const response = toErrorResponse(error, context.requestId);
+    const errorCode = error instanceof ApiError ? error.code : "INTERNAL_ERROR";
 
-    logError("request_failed", {
-      request_id: context.requestId,
-      route: context.route,
-      status_code: response.status,
-      latency_ms: latency,
-      error_code: error instanceof ApiError ? error.code : "INTERNAL_ERROR",
-      error,
-    });
+    if (errorCode === "AUTH_ERROR" && response.status === 401) {
+      logInfo("request_unauthorized", {
+        request_id: context.requestId,
+        route: context.route,
+        status_code: response.status,
+        latency_ms: latency,
+        error_code: errorCode,
+      });
+    } else {
+      logError("request_failed", {
+        request_id: context.requestId,
+        route: context.route,
+        status_code: response.status,
+        latency_ms: latency,
+        error_code: errorCode,
+        error,
+      });
+    }
 
     response.headers.set("x-request-id", context.requestId);
     return response;

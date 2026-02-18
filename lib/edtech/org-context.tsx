@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -26,6 +27,7 @@ type OrgContextValue = {
 };
 
 const SELECTED_ORG_STORAGE_KEY = "policypilot:selected-org-id";
+const ACCESS_TOKEN_REFRESH_BUFFER_MS = 30_000;
 
 const OrgContext = createContext<OrgContextValue | null>(null);
 
@@ -57,17 +59,52 @@ async function fetchMemberships(): Promise<OrgMembership[]> {
     throw new Error("Supabase is not configured in this environment.");
   }
 
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) {
-    throw new Error("Sign in to access organization workspaces.");
-  }
+  const resolveAccessToken = async (): Promise<string> => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      throw new Error("Could not read your session. Sign in again.");
+    }
 
-  const response = await fetch("/api/me/org-memberships", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+    const session = data.session;
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error("Sign in to access organization workspaces.");
+    }
+
+    const expiresAtMs = (session?.expires_at ?? 0) * 1000;
+    const needsRefresh =
+      Boolean(expiresAtMs) && expiresAtMs <= Date.now() + ACCESS_TOKEN_REFRESH_BUFFER_MS;
+
+    if (!needsRefresh) {
+      return accessToken;
+    }
+
+    const refreshResult = await supabase.auth.refreshSession();
+    const refreshedToken = refreshResult.data.session?.access_token;
+    if (refreshResult.error || !refreshedToken) {
+      throw new Error("Your session expired. Sign in again.");
+    }
+
+    return refreshedToken;
+  };
+
+  const runRequest = async (token: string) =>
+    fetch("/api/me/org-memberships", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+  let response = await runRequest(await resolveAccessToken());
+  if (response.status === 401) {
+    const refreshResult = await supabase.auth.refreshSession();
+    const refreshedToken = refreshResult.data.session?.access_token;
+    if (refreshResult.error || !refreshedToken) {
+      throw new Error("Your session expired. Sign in again.");
+    }
+
+    response = await runRequest(refreshedToken);
+  }
 
   const body = (await response.json()) as
     | { memberships: OrgMembership[] }
@@ -92,6 +129,7 @@ export function OrgProvider({ children }: PropsWithChildren) {
   const [selectedOrgId, setSelectedOrgIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const membershipRefreshInFlight = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     const readFromUrl = () => {
@@ -107,22 +145,33 @@ export function OrgProvider({ children }: PropsWithChildren) {
   }, []);
 
   const refreshMemberships = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const nextMemberships = await fetchMemberships();
-      setMemberships(nextMemberships);
-      setSelectedOrgIdState((current) =>
-        pickOrgId(nextMemberships, [queryOrgId, current, readStoredOrgId()]),
-      );
-    } catch (loadError) {
-      setMemberships([]);
-      setSelectedOrgIdState(null);
-      setError(loadError instanceof Error ? loadError.message : "Failed to load organization access.");
-    } finally {
-      setLoading(false);
+    if (membershipRefreshInFlight.current) {
+      return membershipRefreshInFlight.current;
     }
+
+    const promise = (async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const nextMemberships = await fetchMemberships();
+        setMemberships(nextMemberships);
+        setSelectedOrgIdState((current) =>
+          pickOrgId(nextMemberships, [queryOrgId, current, readStoredOrgId()]),
+        );
+      } catch (loadError) {
+        setMemberships([]);
+        setSelectedOrgIdState(null);
+        setError(loadError instanceof Error ? loadError.message : "Failed to load organization access.");
+      } finally {
+        setLoading(false);
+      }
+    })().finally(() => {
+      membershipRefreshInFlight.current = null;
+    });
+
+    membershipRefreshInFlight.current = promise;
+    return promise;
   }, [queryOrgId]);
 
   useEffect(() => {
@@ -135,8 +184,10 @@ export function OrgProvider({ children }: PropsWithChildren) {
 
     void refreshMemberships();
 
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      void refreshMemberships();
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+        void refreshMemberships();
+      }
     });
 
     return () => {
