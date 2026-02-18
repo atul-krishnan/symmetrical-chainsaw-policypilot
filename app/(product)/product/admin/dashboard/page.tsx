@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, RefreshCcw } from "lucide-react";
+import { AlertTriangle, BarChart3, RefreshCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminAccessGate } from "@/components/product/admin-access-gate";
@@ -9,6 +9,16 @@ import { useOrgContext } from "@/lib/edtech/org-context";
 import { hasMinimumRole } from "@/lib/edtech/roles";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatPercent } from "@/lib/utils";
+
+type AtRiskLearner = {
+  assignmentId: string;
+  userId: string;
+  state: string;
+  dueAt: string;
+  daysOverdue: number;
+  moduleTitle: string;
+  roleTrack: string;
+};
 
 type MetricsResponse = {
   orgId: string;
@@ -21,6 +31,7 @@ type MetricsResponse = {
     attestationRate: number;
     averageScore: number;
   }>;
+  atRiskLearners: AtRiskLearner[];
 };
 
 async function getAccessToken(): Promise<string | null> {
@@ -190,6 +201,52 @@ export default function DashboardPage() {
               </ul>
             </article>
           ))}
+        </div>
+      ) : null}
+
+      {/* At-risk learners */}
+      {metrics && metrics.atRiskLearners && metrics.atRiskLearners.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-[#b84c33]" />
+            <h2 className="font-display text-2xl text-[#10244a]">
+              At-risk learners ({metrics.atRiskLearners.length})
+            </h2>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-[#d2ddef]">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-[#eef4ff] text-xs uppercase tracking-wider text-[#6079a2]">
+                <tr>
+                  <th className="px-4 py-3">Learner</th>
+                  <th className="px-4 py-3">Module</th>
+                  <th className="px-4 py-3">Track</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Days Overdue</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e8eef8] bg-white">
+                {metrics.atRiskLearners.map((learner) => (
+                  <tr key={learner.assignmentId}>
+                    <td className="px-4 py-3 text-[#10244a] font-medium">
+                      {learner.userId.slice(0, 8)}…
+                    </td>
+                    <td className="px-4 py-3 text-[#4f6486]">{learner.moduleTitle}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-[#e0ecff] px-2 py-0.5 text-[11px] font-bold uppercase text-[#1f5eff]">
+                        {learner.roleTrack}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[#5b7194]">{learner.state}</td>
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-[#b84c33]">
+                        {learner.daysOverdue}d
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
     </section>

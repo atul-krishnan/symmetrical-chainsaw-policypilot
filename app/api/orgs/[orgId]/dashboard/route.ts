@@ -59,7 +59,7 @@ export async function GET(
         const averageScore =
           attemptsRows.length > 0
             ? attemptsRows.reduce((total, attempt) => total + attempt.score_pct, 0) /
-              attemptsRows.length
+            attemptsRows.length
             : 0;
 
         const metrics = computeCampaignMetrics({
@@ -77,6 +77,39 @@ export async function GET(
       }),
     );
 
+    // At-risk learners: overdue or still pending
+    const atRiskResult = await supabase
+      .from("assignments")
+      .select(
+        "id,user_id,state,due_at,learning_modules!inner(title,role_track)",
+      )
+      .eq("org_id", orgId)
+      .neq("state", "completed")
+      .not("due_at", "is", null)
+      .lt("due_at", new Date().toISOString())
+      .order("due_at", { ascending: true })
+      .limit(50);
+
+    const atRiskLearners = (atRiskResult.data ?? []).map((row) => {
+      const mod = Array.isArray(row.learning_modules)
+        ? row.learning_modules[0]
+        : row.learning_modules;
+      const dueDate = row.due_at ? new Date(row.due_at) : null;
+      const daysOverdue = dueDate
+        ? Math.max(0, Math.ceil((Date.now() - dueDate.getTime()) / 86400000))
+        : 0;
+
+      return {
+        assignmentId: row.id,
+        userId: row.user_id,
+        state: row.state,
+        dueAt: row.due_at,
+        daysOverdue,
+        moduleTitle: mod?.title ?? "Unknown",
+        roleTrack: mod?.role_track ?? "general",
+      };
+    });
+
     await writeRequestAuditLog({
       supabase,
       requestId,
@@ -93,6 +126,7 @@ export async function GET(
     return {
       orgId,
       campaigns: campaignMetrics,
+      atRiskLearners,
     };
   });
 }
