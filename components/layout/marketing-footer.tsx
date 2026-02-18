@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 export function MarketingFooter() {
@@ -5,7 +6,15 @@ export function MarketingFooter() {
     <footer className="border-t border-[#d8e2f2] bg-white/86 px-4 py-12 backdrop-blur-lg sm:px-6 lg:px-8">
       <div className="mx-auto grid w-full max-w-7xl gap-6 text-sm md:grid-cols-[1.2fr_0.45fr_0.35fr] md:items-start">
         <div className="space-y-2">
-          <p className="font-display text-2xl text-[#10244a]">PolicyPilot</p>
+          <div className="flex items-center gap-2">
+            <Image
+              alt="PolicyPilot logo"
+              height={32}
+              src="/logo.png"
+              width={32}
+            />
+            <p className="font-display text-2xl text-[#10244a]">PolicyPilot</p>
+          </div>
           <p className="mt-2 max-w-xl text-[#476082]">
             Enterprise AI policy operations platform for turning governance requirements into completed, auditable training.
           </p>

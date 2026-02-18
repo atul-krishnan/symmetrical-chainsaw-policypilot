@@ -58,51 +58,6 @@ const STEPS = [
   },
 ];
 
-type LineageNode = {
-  id: string;
-  label: string;
-  sublabel: string;
-  x: number;
-  y: number;
-  tone: "root" | "branch" | "leaf";
-};
-
-const LINEAGE_NODES: LineageNode[] = [
-  { id: "policy-source", label: "AI Policy Source", sublabel: "single master doc", x: 540, y: 90, tone: "root" },
-  { id: "obligations", label: "Obligation Graph", sublabel: "risk + controls", x: 220, y: 235, tone: "branch" },
-  { id: "roles", label: "Role Tracks", sublabel: "exec, builder, general", x: 540, y: 235, tone: "branch" },
-  { id: "campaigns", label: "Campaign Engine", sublabel: "assign + remind", x: 860, y: 235, tone: "branch" },
-  { id: "quiz-bank", label: "Quiz Bank", sublabel: "pass/fail gates", x: 140, y: 400, tone: "leaf" },
-  { id: "module-copies", label: "Module Copies", sublabel: "plain-language units", x: 305, y: 400, tone: "leaf" },
-  { id: "exec-brief", label: "Exec Brief", sublabel: "board-level digest", x: 458, y: 400, tone: "leaf" },
-  { id: "builder-lab", label: "Builder Lab", sublabel: "hands-on controls", x: 625, y: 400, tone: "leaf" },
-  { id: "nudges", label: "Smart Nudges", sublabel: "completion pacing", x: 780, y: 400, tone: "leaf" },
-  { id: "evidence-pack", label: "Evidence Pack", sublabel: "csv + signed pdf", x: 940, y: 400, tone: "leaf" },
-];
-
-const LINEAGE_EDGES: Array<{ from: string; to: string }> = [
-  { from: "policy-source", to: "obligations" },
-  { from: "policy-source", to: "roles" },
-  { from: "policy-source", to: "campaigns" },
-  { from: "obligations", to: "quiz-bank" },
-  { from: "obligations", to: "module-copies" },
-  { from: "roles", to: "exec-brief" },
-  { from: "roles", to: "builder-lab" },
-  { from: "campaigns", to: "nudges" },
-  { from: "campaigns", to: "evidence-pack" },
-];
-
-const LINEAGE_NODE_MAP = LINEAGE_NODES.reduce<Record<string, LineageNode>>((map, node) => {
-  map[node.id] = node;
-  return map;
-}, {});
-
-const NODE_TONES: Record<LineageNode["tone"], { fill: string; stroke: string; title: string; subtitle: string }> = {
-  root: { fill: "#dce8ff", stroke: "#1f5eff", title: "#0d2f7a", subtitle: "#1f4a99" },
-  branch: { fill: "#ecf3ff", stroke: "#3267d8", title: "#123a8a", subtitle: "#335b9f" },
-  leaf: { fill: "#f5f9ff", stroke: "#7ea6f0", title: "#1b3f88", subtitle: "#46689e" },
-};
-
 const TESTIMONIALS = [
   {
     quote:
@@ -184,16 +139,6 @@ export function HomeSections() {
         ".home-reveal",
         { opacity: 0, y: 24 },
         { opacity: 1, y: 0, duration: 0.75, ease: "power3.out", stagger: 0.09 },
-      );
-      gsap.fromTo(
-        ".lineage-edge",
-        { strokeDashoffset: 1 },
-        { strokeDashoffset: 0, duration: 1, ease: "power2.out", delay: 0.3, stagger: 0.05 },
-      );
-      gsap.fromTo(
-        ".lineage-node",
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.6, ease: "power2.out", delay: 0.45, stagger: 0.05 },
       );
       gsap.fromTo(
         ".home-image-float",
@@ -306,51 +251,15 @@ export function HomeSections() {
             This tree makes the product flow explicit: ingest source guidance once, then branch into obligation modeling, role-focused delivery, and traceable outcomes.
           </p>
 
-          <div className="home-reveal mt-7 overflow-x-auto rounded-3xl border border-[#cad9f0] bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-            <svg aria-label="PolicyPilot lineage graph from policy source to learning and evidence outputs" className="min-w-[960px] w-full" viewBox="0 0 1080 460">
-              <defs>
-                <linearGradient id="lineageStroke" x1="0" x2="1" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#1f5eff" />
-                  <stop offset="100%" stopColor="#57a8ff" />
-                </linearGradient>
-              </defs>
-
-              {LINEAGE_EDGES.map((edge) => {
-                const fromNode = LINEAGE_NODE_MAP[edge.from];
-                const toNode = LINEAGE_NODE_MAP[edge.to];
-                return (
-                  <line
-                    className="lineage-edge"
-                    key={`${edge.from}-${edge.to}`}
-                    pathLength={1}
-                    stroke="url(#lineageStroke)"
-                    strokeDasharray={1}
-                    strokeDashoffset={1}
-                    strokeLinecap="round"
-                    strokeWidth={2.5}
-                    x1={fromNode.x}
-                    x2={toNode.x}
-                    y1={fromNode.y + 26}
-                    y2={toNode.y - 26}
-                  />
-                );
-              })}
-
-              {LINEAGE_NODES.map((node) => {
-                const tone = NODE_TONES[node.tone];
-                return (
-                  <g className="lineage-node" key={node.id}>
-                    <circle cx={node.x} cy={node.y} fill={tone.fill} r={45} stroke={tone.stroke} strokeWidth={2.4} />
-                    <text fill={tone.title} fontSize={13} fontWeight={700} textAnchor="middle" x={node.x} y={node.y - 2}>
-                      {node.label}
-                    </text>
-                    <text fill={tone.subtitle} fontSize={11} fontWeight={500} textAnchor="middle" x={node.x} y={node.y + 15}>
-                      {node.sublabel}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
+          <div className="home-reveal mt-7 overflow-hidden rounded-3xl border border-[#cad9f0] bg-white p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] sm:p-4">
+            <Image
+              alt="Product lineage map showing one policy source branching into role tracks, campaign logic, and evidence outputs."
+              className="w-full rounded-2xl border border-[#d5dfef]"
+              height={1024}
+              priority={false}
+              src="/marketing/product-lineage-map.png"
+              width={1536}
+            />
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">

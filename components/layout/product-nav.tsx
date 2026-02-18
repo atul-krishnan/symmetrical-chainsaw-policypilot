@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleUserRound, LayoutGrid, LogOut, Menu, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -53,9 +54,12 @@ export function ProductNav() {
     <header className="sticky top-0 z-40 border-b border-[#d7e0ee] bg-white/86 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <Link className="flex items-center gap-2" href="/product/admin/dashboard">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#1f5eff] text-xs font-bold text-white">
-            P
-          </span>
+          <Image
+            alt="PolicyPilot logo"
+            height={32}
+            src="/logo.png"
+            width={32}
+          />
           <span className="font-display text-2xl text-[#10244a]">PolicyPilot</span>
         </Link>
 

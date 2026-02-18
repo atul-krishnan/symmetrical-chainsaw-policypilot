@@ -36,6 +36,9 @@ export const metadata: Metadata = {
     siteName: "PolicyPilot",
     type: "website",
   },
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

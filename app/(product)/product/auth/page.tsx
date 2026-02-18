@@ -11,14 +11,14 @@ export const metadata: Metadata = {
 
 export default function AuthPage() {
   return (
-    <section className="py-10">
-      <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[1.02fr_0.98fr]">
+    <section className="w-full py-6 sm:py-10">
+      <div className="mx-auto grid w-full max-w-7xl gap-5 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
         <AuthPanel />
 
-        <aside className="ink-panel rounded-[1.8rem] p-5">
+        <aside className="ink-panel rounded-[1.8rem] p-5 sm:p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#9dc3ff]">Workspace context</p>
-          <h2 className="mt-2 font-display text-4xl text-white">Enterprise rollout starts with secure access</h2>
-          <p className="mt-3 text-sm text-[#c2d9fb]">
+          <h2 className="mt-2 font-display text-3xl text-white sm:text-4xl">Enterprise rollout starts with secure access</h2>
+          <p className="mt-3 max-w-2xl text-sm text-[#c2d9fb]">
             After sign-in, PolicyPilot resolves your org membership and routes you to the right workspace automatically.
           </p>
 

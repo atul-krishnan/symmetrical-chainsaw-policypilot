@@ -1,8 +1,9 @@
 "use client";
 
-import { KeyRound, Lock, LogIn, Mail, Shield } from "lucide-react";
+import { KeyRound, Lock, LogIn, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -101,49 +102,21 @@ export function AuthPanel() {
   };
 
   return (
-    <div className="flex w-full max-w-[920px] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-lg">
-      {/* Left brand panel */}
-      <div className="hidden w-[380px] shrink-0 flex-col justify-between bg-[var(--bg-sidebar)] p-8 lg:flex">
+    <div className="card w-full max-w-[560px] rounded-[1.6rem] p-6 shadow-md sm:p-8">
+      <div className="mb-6 flex items-center gap-3">
+        <Image
+          alt="PolicyPilot logo"
+          height={36}
+          src="/logo.png"
+          width={36}
+        />
         <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-sm font-bold text-white">
-              P
-            </div>
-            <span className="text-lg font-bold text-white">PolicyPilot</span>
-          </div>
-          <h2 className="mt-8 text-2xl font-bold leading-tight text-white">
-            Enterprise AI Compliance Training
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-slate-400">
-            Transform policy documents into role-ready training modules with auditable attestation workflows.
-          </p>
-        </div>
-
-        {/* Testimonial */}
-        <div className="mt-8 rounded-xl border border-slate-700 bg-slate-800/50 p-5">
-          <p className="text-sm italic text-slate-300">
-            &ldquo;PolicyPilot cut our compliance onboarding from 3 weeks to 2 days — with full audit trails.&rdquo;
-          </p>
-          <p className="mt-3 text-xs font-semibold text-slate-400">
-            — VP Academic Affairs, University of Pacific Northwest
-          </p>
-        </div>
-
-        {/* Trust badges */}
-        <div className="mt-6 flex items-center gap-4 text-[11px] text-slate-500">
-          <span className="inline-flex items-center gap-1">
-            <Shield className="h-3.5 w-3.5" />
-            SOC 2 Ready
-          </span>
-          <span>•</span>
-          <span>AES-256 Encryption</span>
-          <span>•</span>
-          <span>RBAC</span>
+          <p className="text-base font-semibold text-[var(--text-primary)]">PolicyPilot</p>
+          <p className="text-xs text-[var(--text-muted)]">Enterprise AI Compliance Training</p>
         </div>
       </div>
 
-      {/* Right form panel */}
-      <div className="flex flex-1 flex-col justify-center p-6 sm:p-10">
+      <div className="flex flex-col">
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           Sign in to your workspace
         </h1>
