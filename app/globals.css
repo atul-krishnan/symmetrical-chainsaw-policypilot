@@ -1,79 +1,343 @@
 @import "tailwindcss";
 
+/* ======================================================================
+   PolicyPilot — Enterprise Design System
+   ====================================================================== */
+
 :root {
-  --bg-main: #f3f6fb;
+  /* ---- Layout ---- */
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 64px;
+  --header-height: 56px;
+
+  /* ---- Color: Neutrals (Slate scale) ---- */
+  --bg-main: #f8f9fb;
+  --bg-sidebar: #0f172a;
+  --bg-sidebar-hover: #1e293b;
+  --bg-sidebar-active: rgba(59, 130, 246, 0.12);
   --bg-panel: #ffffff;
-  --bg-panel-muted: #f8fbff;
-  --bg-ink: #0f1f42;
-  --text-primary: #101f3e;
-  --text-muted: #4f6486;
-  --border-soft: #d9e2f0;
-  --border-strong: #c5d2e7;
-  --accent-blue: #1f5eff;
-  --accent-blue-strong: #154ee6;
-  --accent-cyan: #18a7ff;
-  --accent-emerald: #17a673;
-  --accent-amber: #d98b2b;
-  --focus-ring: #1f5eff;
+  --bg-panel-alt: #f8fafc;
+  --bg-muted: #f1f5f9;
+
+  /* ---- Color: Text ---- */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --text-inverse: #f8fafc;
+  --text-sidebar: #cbd5e1;
+  --text-sidebar-active: #ffffff;
+
+  /* ---- Color: Brand ---- */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: #dbeafe;
+  --accent-subtle: #eff6ff;
+
+  /* ---- Color: Semantic ---- */
+  --success: #16a34a;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --info: #0284c7;
+  --info-bg: #f0f9ff;
+  --info-border: #bae6fd;
+
+  /* ---- Borders ---- */
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-focus: #2563eb;
+
+  /* ---- Radius ---- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ---- Shadows ---- */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+
+  /* ---- Focus ---- */
+  --focus-ring: 0 0 0 2px var(--bg-main), 0 0 0 4px var(--accent);
 }
 
 @theme inline {
-  --font-display: var(--font-syne);
-  --font-body: var(--font-manrope);
+  --font-sans: var(--font-inter);
 }
 
+/* ======================================================================
+   Base
+   ====================================================================== */
+
 * {
-  border-color: var(--border-soft);
+  border-color: var(--border);
 }
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(80rem 46rem at 85% -12%, rgba(31, 94, 255, 0.2) 0%, rgba(31, 94, 255, 0) 66%),
-    radial-gradient(64rem 34rem at -8% 16%, rgba(24, 167, 255, 0.16) 0%, rgba(24, 167, 255, 0) 64%),
-    linear-gradient(180deg, #f6f9ff 0%, #f2f6fd 48%, #edf3fb 100%);
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-light);
   color: var(--text-primary);
 }
+
+/* ======================================================================
+   Focus & Transitions
+   ====================================================================== */
 
 a,
 button,
 input,
 select,
 textarea {
-  transition-duration: 160ms;
+  transition: all 150ms ease;
 }
 
 input:focus,
 select:focus,
-textarea:focus,
-button:focus,
-a:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+textarea:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-color: var(--accent);
 }
 
-::selection {
-  background: rgba(31, 94, 255, 0.2);
-  color: #0d1f45;
+button:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
+/* ======================================================================
+   Buttons
+   ====================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  height: 36px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+
+.btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.btn-lg { height: 40px; padding: 0 20px; font-size: 14px; }
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: white;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--bg-muted); border-color: var(--border-strong); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+.btn-ghost:hover { background: var(--bg-muted); color: var(--text-primary); }
+
+.btn-destructive {
+  background: var(--danger);
+  color: white;
+  border: 1px solid var(--danger);
+}
+.btn-destructive:hover { background: #b91c1c; }
+
+/* ======================================================================
+   Cards
+   ====================================================================== */
+
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xs);
+}
+
+.stat-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+/* Legacy compat — maps old class to new system */
 .surface-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 251, 255, 0.94));
-  border: 1px solid var(--border-soft);
-  box-shadow:
-    0 1px 0 rgba(15, 31, 66, 0.04),
-    0 28px 58px rgba(19, 46, 95, 0.08);
-  backdrop-filter: blur(8px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
 }
 
 .soft-chip {
-  background: linear-gradient(180deg, #ffffff, #f5f9ff);
-  border: 1px solid var(--border-soft);
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
-.app-grid {
-  background-image:
-    linear-gradient(to right, rgba(105, 134, 189, 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(105, 134, 189, 0.08) 1px, transparent 1px);
-  background-size: 24px 24px;
+/* ======================================================================
+   Status Pills
+   ====================================================================== */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  border: 1px solid;
+  line-height: 1.6;
 }
+
+.status-pill-success { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.status-pill-warning { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+.status-pill-danger  { background: var(--danger-bg);  color: var(--danger);  border-color: var(--danger-border); }
+.status-pill-info    { background: var(--info-bg);    color: var(--info);    border-color: var(--info-border); }
+.status-pill-neutral { background: var(--bg-muted);   color: var(--text-muted); border-color: var(--border); }
+
+/* ======================================================================
+   Data Tables
+   ====================================================================== */
+
+.data-table {
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.data-table th {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table th:first-child { border-top-left-radius: var(--radius-lg); }
+.data-table th:last-child  { border-top-right-radius: var(--radius-lg); }
+
+.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.data-table tbody tr:hover {
+  background: var(--accent-subtle);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ======================================================================
+   Page Layout Utilities
+   ====================================================================== */
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.page-section {
+  margin-top: 24px;
+}
+
+.kpi-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+/* ======================================================================
+   Enterprise Trust Signals
+   ====================================================================== */
+
+.audit-timestamp {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: right;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+}
+
+.trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ======================================================================
+   Scrollbar (subtle)
+   ====================================================================== */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }

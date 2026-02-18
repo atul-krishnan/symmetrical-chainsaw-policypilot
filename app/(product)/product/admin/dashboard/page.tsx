@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertTriangle, BarChart3, RefreshCcw } from "lucide-react";
+import { AlertTriangle, BarChart3, RefreshCcw, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminAccessGate } from "@/components/product/admin-access-gate";
-import { SessionStatus } from "@/components/product/session-status";
 import { useOrgContext } from "@/lib/edtech/org-context";
 import { hasMinimumRole } from "@/lib/edtech/roles";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -36,12 +35,14 @@ type MetricsResponse = {
 
 async function getAccessToken(): Promise<string | null> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return null;
-  }
-
+  if (!supabase) return null;
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  let token = data.session?.access_token ?? null;
+  if (!token) {
+    const refresh = await supabase.auth.refreshSession();
+    token = refresh.data.session?.access_token ?? null;
+  }
+  return token;
 }
 
 export default function DashboardPage() {
@@ -51,81 +52,40 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
 
   const summary = useMemo(() => {
-    if (!metrics) {
-      return null;
-    }
-
-    const campaigns = metrics.campaigns;
-    const assignmentsTotal = campaigns.reduce((sum, campaign) => sum + campaign.assignmentsTotal, 0);
-    const assignmentsCompleted = campaigns.reduce(
-      (sum, campaign) => sum + campaign.assignmentsCompleted,
-      0,
-    );
-    const avgCompletion =
-      campaigns.length > 0
-        ? campaigns.reduce((sum, campaign) => sum + campaign.completionRate, 0) / campaigns.length
-        : 0;
-    const avgAttestation =
-      campaigns.length > 0
-        ? campaigns.reduce((sum, campaign) => sum + campaign.attestationRate, 0) / campaigns.length
-        : 0;
-
-    return {
-      campaigns: campaigns.length,
-      assignmentsTotal,
-      assignmentsCompleted,
-      avgCompletion,
-      avgAttestation,
-    };
+    if (!metrics) return null;
+    const c = metrics.campaigns;
+    const total = c.reduce((s, x) => s + x.assignmentsTotal, 0);
+    const done = c.reduce((s, x) => s + x.assignmentsCompleted, 0);
+    const avgComp = c.length > 0 ? c.reduce((s, x) => s + x.completionRate, 0) / c.length : 0;
+    const avgAtt = c.length > 0 ? c.reduce((s, x) => s + x.attestationRate, 0) / c.length : 0;
+    return { campaigns: c.length, total, done, avgComp, avgAtt };
   }, [metrics]);
 
   const loadMetrics = useCallback(async () => {
-    if (!selectedOrgId || !canView) {
-      return;
-    }
-
+    if (!selectedOrgId || !canView) return;
     setLoading(true);
     setError(null);
-
     const token = await getAccessToken();
-    if (!token) {
-      setError("Sign in before loading dashboard metrics.");
-      setLoading(false);
-      return;
-    }
+    if (!token) { setError("Sign in to view dashboard."); setLoading(false); return; }
 
-    const response = await fetch(`/api/orgs/${selectedOrgId}/dashboard`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    const res = await fetch(`/api/orgs/${selectedOrgId}/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
-
-    const body = (await response.json()) as MetricsResponse | { error: { message: string } };
-
-    if (!response.ok) {
-      setError("error" in body ? body.error.message : "Failed to load metrics");
-      setLoading(false);
-      return;
-    }
+    const body = (await res.json()) as MetricsResponse | { error: { message: string } };
+    if (!res.ok) { setError("error" in body ? body.error.message : "Failed to load metrics"); setLoading(false); return; }
 
     setMetrics(body as MetricsResponse);
+    setFetchedAt(new Date());
     setLoading(false);
   }, [canView, selectedOrgId]);
 
   useEffect(() => {
-    if (!selectedOrgId || !canView) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void loadMetrics();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
+    if (!selectedOrgId || !canView) return;
+    const t = window.setTimeout(() => void loadMetrics(), 0);
+    return () => window.clearTimeout(t);
   }, [canView, loadMetrics, selectedOrgId]);
 
   if (!canView) {
@@ -134,113 +94,147 @@ export default function DashboardPage() {
         currentRole={selectedMembership?.role}
         orgName={selectedMembership?.orgName}
         requiredRole="manager"
-        title="Compliance dashboard"
+        title="Compliance Dashboard"
       />
     );
   }
 
+  const kpiCards = summary
+    ? [
+      { label: "Campaigns", value: summary.campaigns, icon: BarChart3 },
+      { label: "Total Assignments", value: summary.total, sub: `${summary.done} completed`, icon: TrendingUp },
+      { label: "Avg Completion", value: formatPercent(summary.avgComp), icon: TrendingUp },
+      { label: "Avg Attestation", value: formatPercent(summary.avgAtt), icon: TrendingUp },
+    ]
+    : [];
+
   return (
-    <section className="mx-auto max-w-6xl space-y-5 rounded-[1.9rem] surface-card p-6 sm:p-7">
-      <SessionStatus />
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Page header */}
+      <div className="page-header">
         <div>
-          <h1 className="font-display text-4xl text-[#10244a]">Compliance dashboard</h1>
-          <p className="mt-2 text-sm text-[#4f6486]">
-            Monitor completion and attestation outcomes for {selectedMembership?.orgName ?? "your workspace"}.
+          <h1 className="page-title">Compliance Dashboard</h1>
+          <p className="page-subtitle">
+            Monitor completion and attestation across {selectedMembership?.orgName ?? "your workspace"}.
           </p>
         </div>
-
-        <button
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-[#d2ddef] bg-white px-4 text-sm font-semibold text-[#1f3b67] hover:bg-[#f4f8ff]"
-          onClick={() => void loadMetrics()}
-          type="button"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          {loading ? "Loading..." : "Refresh metrics"}
+        <button className="btn btn-secondary btn-sm" onClick={() => void loadMetrics()} type="button">
+          <RefreshCcw className="h-3.5 w-3.5" />
+          {loading ? "Loading…" : "Refresh"}
         </button>
       </div>
 
-      {error ? <p className="text-sm text-[#a54f3a]">{error}</p> : null}
+      {error && (
+        <p className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]">
+          {error}
+        </p>
+      )}
 
-      {summary ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="rounded-2xl soft-chip p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-[#6079a2]">Campaigns</p>
-            <p className="mt-2 font-display text-4xl text-[#122d5b]">{summary.campaigns}</p>
-          </article>
-          <article className="rounded-2xl soft-chip p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-[#6079a2]">Assignments</p>
-            <p className="mt-2 font-display text-4xl text-[#122d5b]">{summary.assignmentsTotal}</p>
-            <p className="text-xs text-[#4f6486]">Completed: {summary.assignmentsCompleted}</p>
-          </article>
-          <article className="rounded-2xl soft-chip p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-[#6079a2]">Avg completion</p>
-            <p className="mt-2 font-display text-4xl text-[#122d5b]">{formatPercent(summary.avgCompletion)}</p>
-          </article>
-          <article className="rounded-2xl soft-chip p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-[#6079a2]">Avg attestation</p>
-            <p className="mt-2 font-display text-4xl text-[#122d5b]">{formatPercent(summary.avgAttestation)}</p>
-          </article>
-        </div>
-      ) : null}
-
-      {metrics ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {metrics.campaigns.map((campaign) => (
-            <article className="rounded-2xl soft-chip p-5" key={campaign.campaignId}>
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="font-display text-3xl text-[#112f60]">{campaign.name}</h2>
-                <BarChart3 className="mt-1 h-5 w-5 text-[#1f5eff]" />
-              </div>
-              <ul className="mt-3 space-y-1 text-sm text-[#455d82]">
-                <li>Total assignments: {campaign.assignmentsTotal}</li>
-                <li>Completed assignments: {campaign.assignmentsCompleted}</li>
-                <li>Completion rate: {formatPercent(campaign.completionRate)}</li>
-                <li>Attestation rate: {formatPercent(campaign.attestationRate)}</li>
-                <li>Average score: {campaign.averageScore.toFixed(1)}%</li>
-              </ul>
-            </article>
+      {/* Loading skeleton */}
+      {loading && !summary && (
+        <div className="kpi-grid">
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="stat-card animate-pulse">
+              <div className="h-3 w-20 rounded bg-[var(--bg-muted)]" />
+              <div className="mt-3 h-8 w-16 rounded bg-[var(--bg-muted)]" />
+            </div>
           ))}
         </div>
-      ) : null}
+      )}
 
-      {/* At-risk learners */}
-      {metrics && metrics.atRiskLearners && metrics.atRiskLearners.length > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-[#b84c33]" />
-            <h2 className="font-display text-2xl text-[#10244a]">
-              At-risk learners ({metrics.atRiskLearners.length})
-            </h2>
+      {/* KPI cards */}
+      {summary && (
+        <div className="kpi-grid">
+          {kpiCards.map((kpi) => {
+            const Icon = kpi.icon;
+            return (
+              <div key={kpi.label} className="stat-card">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                    {kpi.label}
+                  </p>
+                  <Icon className="h-4 w-4 text-[var(--text-faint)]" />
+                </div>
+                <p className="mt-2 text-3xl font-bold tracking-tight text-[var(--text-primary)]">{kpi.value}</p>
+                {"sub" in kpi && kpi.sub && (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">{kpi.sub}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Campaign table */}
+      {metrics && metrics.campaigns.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="border-b border-[var(--border)] px-5 py-4">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">Campaigns</h2>
           </div>
-          <div className="overflow-x-auto rounded-2xl border border-[#d2ddef]">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-[#eef4ff] text-xs uppercase tracking-wider text-[#6079a2]">
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3">Learner</th>
-                  <th className="px-4 py-3">Module</th>
-                  <th className="px-4 py-3">Track</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Days Overdue</th>
+                  <th>Campaign</th>
+                  <th>Assignments</th>
+                  <th>Completed</th>
+                  <th>Completion</th>
+                  <th>Attestation</th>
+                  <th>Avg Score</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e8eef8] bg-white">
-                {metrics.atRiskLearners.map((learner) => (
-                  <tr key={learner.assignmentId}>
-                    <td className="px-4 py-3 text-[#10244a] font-medium">
-                      {learner.userId.slice(0, 8)}…
-                    </td>
-                    <td className="px-4 py-3 text-[#4f6486]">{learner.moduleTitle}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-[#e0ecff] px-2 py-0.5 text-[11px] font-bold uppercase text-[#1f5eff]">
-                        {learner.roleTrack}
+              <tbody>
+                {metrics.campaigns.map((c) => (
+                  <tr key={c.campaignId}>
+                    <td className="font-medium text-[var(--text-primary)]">{c.name}</td>
+                    <td>{c.assignmentsTotal}</td>
+                    <td>{c.assignmentsCompleted}</td>
+                    <td>
+                      <span className={c.completionRate >= 0.8 ? "text-[var(--success)] font-medium" : ""}>
+                        {formatPercent(c.completionRate)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#5b7194]">{learner.state}</td>
-                    <td className="px-4 py-3">
-                      <span className="font-semibold text-[#b84c33]">
-                        {learner.daysOverdue}d
-                      </span>
+                    <td>{formatPercent(c.attestationRate)}</td>
+                    <td>{c.averageScore.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* At-risk learners */}
+      {metrics && metrics.atRiskLearners && metrics.atRiskLearners.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-[var(--border)] px-5 py-4">
+            <AlertTriangle className="h-4 w-4 text-[var(--danger)]" />
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">
+              At-Risk Learners ({metrics.atRiskLearners.length})
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Learner</th>
+                  <th>Module</th>
+                  <th>Track</th>
+                  <th>Status</th>
+                  <th>Days Overdue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.atRiskLearners.map((l) => (
+                  <tr key={l.assignmentId}>
+                    <td className="font-medium text-[var(--text-primary)]">{l.userId.slice(0, 8)}…</td>
+                    <td>{l.moduleTitle}</td>
+                    <td>
+                      <span className="status-pill status-pill-info capitalize">{l.roleTrack}</span>
+                    </td>
+                    <td className="capitalize">{l.state.replace("_", " ")}</td>
+                    <td>
+                      <span className="font-semibold text-[var(--danger)]">{l.daysOverdue}d</span>
                     </td>
                   </tr>
                 ))}
@@ -248,7 +242,14 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
-      ) : null}
-    </section>
+      )}
+
+      {/* Audit timestamp */}
+      {fetchedAt && (
+        <p className="audit-timestamp">
+          Data as of {fetchedAt.toLocaleString()} · Refresh for latest
+        </p>
+      )}
+    </div>
   );
 }

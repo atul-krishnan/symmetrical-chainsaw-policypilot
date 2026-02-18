@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { SessionStatus } from "@/components/product/session-status";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 // ---------------------------------------------------------------------------
@@ -31,16 +30,9 @@ type Module = {
   estimatedMinutes: number;
   campaignId: string;
 };
-type Assignment = {
-  id: string;
-  state: string;
-  dueAt: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-};
 type Campaign = { id: string; name: string; status: string } | null;
 type DetailResponse = {
-  assignment: Assignment;
+  assignment: { id: string; state: string; dueAt: string | null; startedAt: string | null; completedAt: string | null };
   module: Module;
   campaign: Campaign;
   questions: Question[];
@@ -54,11 +46,7 @@ type AttemptResult = {
 
 type Step = "read" | "quiz" | "result";
 
-const TRACK_LABEL: Record<string, string> = {
-  exec: "Executive",
-  builder: "Builder",
-  general: "General",
-};
+const TRACK_LABEL: Record<string, string> = { exec: "Executive", builder: "Builder", general: "General" };
 
 // ---------------------------------------------------------------------------
 // Component
@@ -74,198 +62,133 @@ export default function AssignmentPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DetailResponse | null>(null);
   const [step, setStep] = useState<Step>("read");
-
-  // Quiz state
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResult | null>(null);
 
   const loadDetail = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
+    setLoading(true); setError(null);
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) {
-      setError("Supabase is not configured.");
-      setLoading(false);
-      return;
-    }
-
+    if (!supabase) { setError("Supabase not configured."); setLoading(false); return; }
     const { data: session } = await supabase.auth.getSession();
     let token = session.session?.access_token;
-    if (!token) {
-      const refresh = await supabase.auth.refreshSession();
-      token = refresh.data.session?.access_token ?? undefined;
-    }
-
-    if (!token) {
-      setError("Sign in to view this module.");
-      setLoading(false);
-      return;
-    }
-
+    if (!token) { const r = await supabase.auth.refreshSession(); token = r.data.session?.access_token ?? undefined; }
+    if (!token) { setError("Sign in to view this module."); setLoading(false); return; }
     try {
-      if (!assignmentId) {
-        setError("Assignment id is missing.");
-        return;
-      }
-
-      const res = await fetch(`/api/me/assignments/${assignmentId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      if (!assignmentId) { setError("Assignment id missing."); return; }
+      const res = await fetch(`/api/me/assignments/${assignmentId}`, { headers: { Authorization: `Bearer ${token}` } });
       const body = await res.json();
-      if (!res.ok) {
-        setError(body?.error?.message ?? "Failed to load assignment.");
-        setLoading(false);
-        return;
-      }
+      if (!res.ok) { setError(body?.error?.message ?? "Failed to load."); setLoading(false); return; }
       setData(body as DetailResponse);
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError("Network error."); } finally { setLoading(false); }
   }, [assignmentId]);
 
-  useEffect(() => {
-    void loadDetail();
-  }, [loadDetail]);
+  useEffect(() => { void loadDetail(); }, [loadDetail]);
 
   const submitQuiz = useCallback(async () => {
     if (!data) return;
-
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
-
     const { data: session } = await supabase.auth.getSession();
     const token = session.session?.access_token;
     if (!token) return;
-
-    setSubmitting(true);
-    setError(null);
-
+    setSubmitting(true); setError(null);
     const orderedAnswers = data.questions.map((q) => answers[q.id] ?? 0);
-
     try {
       const res = await fetch(`/api/me/modules/${data.module.id}/attempts`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ answers: orderedAnswers }),
       });
       const body = await res.json();
-      if (!res.ok) {
-        setError(body?.error?.message ?? "Submission failed.");
-        setSubmitting(false);
-        return;
-      }
+      if (!res.ok) { setError(body?.error?.message ?? "Submission failed."); setSubmitting(false); return; }
       setResult(body as AttemptResult);
       setStep("result");
-    } catch {
-      setError("Network error.");
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setError("Network error."); } finally { setSubmitting(false); }
   }, [data, answers]);
 
   // -----------------------------------------------------------------------
-  // Render
+  // Renders
   // -----------------------------------------------------------------------
 
   if (loading) {
     return (
-      <section className="mx-auto max-w-4xl py-12 text-center">
-        <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#1f5eff]" />
-        <p className="mt-3 text-sm text-[#5b7194]">Loading module…</p>
-      </section>
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
+        <p className="mt-3 text-sm text-[var(--text-muted)]">Loading module…</p>
+      </div>
     );
   }
 
   if (error && !data) {
     return (
-      <section className="mx-auto max-w-4xl py-12 text-center">
-        <p className="text-sm text-[#a04e39]">{error}</p>
-        <Link
-          href="/product/learn"
-          className="mt-4 inline-flex items-center gap-1 text-sm text-[#1f5eff] hover:underline"
-        >
+      <div className="mx-auto max-w-lg py-20 text-center">
+        <p className="text-sm text-[var(--danger)]">{error}</p>
+        <Link href="/product/learn" className="mt-4 inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to assignments
         </Link>
-      </section>
+      </div>
     );
   }
 
   if (!data) return null;
 
   const { module: mod, campaign, questions } = data;
-  const allAnswered =
-    questions.length > 0 &&
-    questions.every((q) => answers[q.id] !== undefined);
+  const allAnswered = questions.length > 0 && questions.every((q) => answers[q.id] !== undefined);
+
+  const steps: { key: Step; label: string }[] = [
+    { key: "read", label: "1. Read" },
+    { key: "quiz", label: "2. Quiz" },
+    { key: "result", label: "3. Result" },
+  ];
 
   return (
-    <section className="mx-auto max-w-4xl space-y-6 py-6 px-4 sm:px-6">
-      <SessionStatus />
-
-      {/* Back link */}
-      <Link
-        href="/product/learn"
-        className="inline-flex items-center gap-1 text-sm text-[#1f5eff] hover:underline"
-      >
+    <div className="mx-auto max-w-4xl space-y-5 py-2">
+      <Link href="/product/learn" className="inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline">
         <ArrowLeft className="h-4 w-4" /> My Learning
       </Link>
 
-      {/* Header card */}
-      <div className="rounded-[1.8rem] surface-card p-6 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            {campaign && (
-              <p className="text-xs uppercase tracking-[0.16em] text-[#6079a2]">
-                {campaign.name}
-              </p>
-            )}
-            <h1 className="font-display text-3xl sm:text-4xl text-[#10244a]">
-              {mod.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-[#5b7194]">
-              <span
-                className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-[#e0ecff] text-[#1f5eff]"
-              >
-                {TRACK_LABEL[mod.roleTrack] ?? mod.roleTrack}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" /> ~{mod.estimatedMinutes} min
-              </span>
-              <span>Pass score: {mod.passScore}%</span>
-            </div>
+      {/* Header */}
+      <div className="card p-6">
+        <div className="space-y-1">
+          {campaign && (
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">{campaign.name}</p>
+          )}
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">{mod.title}</h1>
+          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-[var(--text-muted)]">
+            <span className="status-pill status-pill-info capitalize">
+              {TRACK_LABEL[mod.roleTrack] ?? mod.roleTrack}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" /> ~{mod.estimatedMinutes} min
+            </span>
+            <span>Pass: {mod.passScore}%</span>
           </div>
         </div>
 
-        {/* Step navigation */}
+        {/* Stepper */}
         <div className="mt-5 flex gap-1">
-          {(["read", "quiz", "result"] as Step[]).map((s, i) => {
-            const label = ["1. Read", "2. Quiz", "3. Result"][i];
-            const active = step === s;
+          {steps.map((s) => {
+            const active = step === s.key;
             const done =
-              (s === "read" && (step === "quiz" || step === "result")) ||
-              (s === "quiz" && step === "result");
+              (s.key === "read" && (step === "quiz" || step === "result")) ||
+              (s.key === "quiz" && step === "result");
             return (
               <button
-                key={s}
+                key={s.key}
                 type="button"
-                className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-colors ${active
-                  ? "bg-[#1f5eff] text-white"
-                  : done
-                    ? "bg-[#dff0df] text-[#12795c]"
-                    : "bg-[#eef4ff] text-[#5b7194]"
+                className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-colors ${active
+                    ? "bg-[var(--accent)] text-white"
+                    : done
+                      ? "bg-[var(--success-bg)] text-[var(--success)] border border-[var(--success-border)]"
+                      : "bg-[var(--bg-muted)] text-[var(--text-muted)]"
                   }`}
                 onClick={() => {
-                  if (s === "result" && !result) return;
-                  setStep(s);
+                  if (s.key === "result" && !result) return;
+                  setStep(s.key);
                 }}
               >
-                {label}
+                {s.label}
               </button>
             );
           })}
@@ -273,51 +196,39 @@ export default function AssignmentPage() {
       </div>
 
       {error && (
-        <p className="text-sm text-[#a04e39] bg-[#fff1ed] rounded-xl px-4 py-3 border border-[#f1cbc2]">
+        <p className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-2 text-sm text-[var(--danger)]">
           {error}
         </p>
       )}
 
-      {/* Step: Read */}
+      {/* Read */}
       {step === "read" && (
-        <div className="rounded-[1.8rem] surface-card p-6 sm:p-7 space-y-5">
+        <div className="card p-6 space-y-5">
           {mod.summary && (
-            <p className="text-sm leading-relaxed text-[#4f6486] border-l-4 border-[#1f5eff] pl-4">
+            <p className="text-sm leading-relaxed text-[var(--text-secondary)] border-l-4 border-[var(--accent)] pl-4">
               {mod.summary}
             </p>
           )}
-
-          <div className="prose prose-sm max-w-none text-[#1e2b3d]">
-            <div
-              dangerouslySetInnerHTML={{
-                __html: simpleMarkdown(mod.contentMarkdown),
-              }}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#1f5eff] px-6 text-sm font-semibold text-white hover:bg-[#154ee6]"
-            onClick={() => setStep("quiz")}
-          >
+          <div
+            className="prose prose-sm max-w-none text-[var(--text-primary)]"
+            dangerouslySetInnerHTML={{ __html: simpleMarkdown(mod.contentMarkdown) }}
+          />
+          <button className="btn btn-primary" onClick={() => setStep("quiz")} type="button">
             <BookOpenCheck className="h-4 w-4" />
             Start Quiz ({questions.length} questions)
           </button>
         </div>
       )}
 
-      {/* Step: Quiz */}
+      {/* Quiz */}
       {step === "quiz" && (
         <div className="space-y-4">
           {questions.map((q, qi) => (
-            <div
-              key={q.id}
-              className="rounded-2xl surface-card p-5 space-y-3"
-            >
-              <p className="text-xs font-bold uppercase tracking-wider text-[#6079a2]">
+            <div key={q.id} className="card p-5 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">
                 Question {qi + 1}
               </p>
-              <p className="text-sm font-medium text-[#10244a]">{q.prompt}</p>
+              <p className="text-sm font-medium text-[var(--text-primary)]">{q.prompt}</p>
               <div className="grid gap-2">
                 {q.choices.map((choice, ci) => {
                   const selected = answers[q.id] === ci;
@@ -325,18 +236,16 @@ export default function AssignmentPage() {
                     <button
                       key={ci}
                       type="button"
-                      className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm transition-colors border ${selected
-                        ? "border-[#1f5eff] bg-[#e8f0ff] text-[#10244a] font-medium"
-                        : "border-[#d3deef] bg-white text-[#3b5068] hover:bg-[#f4f8ff]"
+                      className={`flex items-center gap-3 rounded-lg px-4 py-3 text-left text-sm transition-colors border ${selected
+                          ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--text-primary)] font-medium"
+                          : "border-[var(--border)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-muted)]"
                         }`}
-                      onClick={() =>
-                        setAnswers((prev) => ({ ...prev, [q.id]: ci }))
-                      }
+                      onClick={() => setAnswers((p) => ({ ...p, [q.id]: ci }))}
                     >
                       <span
-                        className={`inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${selected
-                          ? "bg-[#1f5eff] text-white"
-                          : "bg-[#eef4ff] text-[#5b7194]"
+                        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${selected
+                            ? "bg-[var(--accent)] text-white"
+                            : "bg-[var(--bg-muted)] text-[var(--text-muted)]"
                           }`}
                       >
                         {String.fromCharCode(65 + ci)}
@@ -350,18 +259,14 @@ export default function AssignmentPage() {
           ))}
 
           <div className="flex gap-3">
-            <button
-              type="button"
-              className="h-11 rounded-xl border border-[#d3deef] bg-white px-5 text-sm font-semibold text-[#10244a] hover:bg-[#f4f8ff]"
-              onClick={() => setStep("read")}
-            >
+            <button className="btn btn-secondary" onClick={() => setStep("read")} type="button">
               Back to Content
             </button>
             <button
-              type="button"
-              className="h-11 rounded-xl bg-[#1f5eff] px-6 text-sm font-semibold text-white hover:bg-[#154ee6] disabled:opacity-50"
+              className="btn btn-primary"
               disabled={!allAnswered || submitting}
               onClick={() => void submitQuiz()}
+              type="button"
             >
               {submitting ? "Submitting…" : "Submit Answers"}
             </button>
@@ -369,76 +274,61 @@ export default function AssignmentPage() {
         </div>
       )}
 
-      {/* Step: Result */}
+      {/* Result */}
       {step === "result" && result && (
-        <div className="rounded-[1.8rem] surface-card p-6 sm:p-7 text-center space-y-5">
+        <div className="card p-8 text-center space-y-5">
           {result.passed ? (
             <>
-              <CheckCircle2 className="mx-auto h-16 w-16 text-[#12795c]" />
-              <h2 className="font-display text-3xl text-[#10244a]">
-                Passed! 🎉
-              </h2>
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--success-bg)] border border-[var(--success-border)]">
+                <CheckCircle2 className="h-8 w-8 text-[var(--success)]" />
+              </div>
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">Passed! 🎉</h2>
             </>
           ) : (
             <>
-              <XCircle className="mx-auto h-16 w-16 text-[#b84c33]" />
-              <h2 className="font-display text-3xl text-[#10244a]">
-                Not yet — try again
-              </h2>
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--danger-bg)] border border-[var(--danger-border)]">
+                <XCircle className="h-8 w-8 text-[var(--danger)]" />
+              </div>
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">Not yet — try again</h2>
             </>
           )}
 
-          <p className="text-lg text-[#4f6486]">
-            Score: <span className="font-bold text-[#10244a]">{result.scorePct}%</span>
-            {" · "}
-            Pass threshold: {data.module.passScore}%
+          <p className="text-base text-[var(--text-muted)]">
+            Score: <span className="font-bold text-[var(--text-primary)]">{result.scorePct}%</span>
+            {" · "}Pass threshold: {data.module.passScore}%
           </p>
 
           <div className="flex flex-wrap justify-center gap-3 mt-4">
             {result.passed ? (
-              <Link
-                href={`/product/attest/${result.campaignId}`}
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#1f5eff] px-6 text-sm font-semibold text-white hover:bg-[#154ee6]"
-              >
+              <Link href={`/product/attest/${result.campaignId}`} className="btn btn-primary">
                 Continue to Attestation
               </Link>
             ) : (
               <button
                 type="button"
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#1f5eff] px-6 text-sm font-semibold text-white hover:bg-[#154ee6]"
-                onClick={() => {
-                  setAnswers({});
-                  setResult(null);
-                  setStep("quiz");
-                }}
+                className="btn btn-primary"
+                onClick={() => { setAnswers({}); setResult(null); setStep("quiz"); }}
               >
                 <RotateCcw className="h-4 w-4" /> Retry Quiz
               </button>
             )}
-            <Link
-              href="/product/learn"
-              className="inline-flex h-11 items-center rounded-xl border border-[#d3deef] bg-white px-5 text-sm font-semibold text-[#10244a] hover:bg-[#f4f8ff]"
-            >
+            <Link href="/product/learn" className="btn btn-secondary">
               Back to My Learning
             </Link>
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Simple markdown → HTML (covers headings, bold, italic, lists, paragraphs)
+// Simple markdown → HTML
 // ---------------------------------------------------------------------------
 
 function simpleMarkdown(md: string): string {
   if (!md) return "";
-  const escaped = md
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
+  const escaped = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return escaped
     .replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold mt-4 mb-1">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold mt-5 mb-2">$1</h2>')

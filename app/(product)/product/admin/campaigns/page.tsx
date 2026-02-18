@@ -5,17 +5,12 @@ import { CalendarClock, PlusCircle, RefreshCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminAccessGate } from "@/components/product/admin-access-gate";
-import { SessionStatus } from "@/components/product/session-status";
 import { useOrgContext } from "@/lib/edtech/org-context";
 import { hasMinimumRole } from "@/lib/edtech/roles";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type PolicyListResponse = {
-  items: Array<{
-    id: string;
-    title: string;
-    parseStatus: string;
-  }>;
+  items: Array<{ id: string; title: string; parseStatus: string }>;
 };
 
 type DashboardResponse = {
@@ -29,21 +24,15 @@ type DashboardResponse = {
 
 async function getAccessToken(): Promise<string | null> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return null;
-  }
-
+  if (!supabase) return null;
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
 
 function withOrg(path: string, orgId: string | null): string {
-  if (!orgId) {
-    return path;
-  }
-
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}org=${orgId}`;
+  if (!orgId) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}org=${orgId}`;
 }
 
 export default function CampaignsPage() {
@@ -61,285 +50,185 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const readyPolicies = useMemo(
-    () => policies.filter((policy) => policy.parseStatus === "ready"),
+    () => policies.filter((p) => p.parseStatus === "ready"),
     [policies],
   );
 
   const loadAdminData = useCallback(async () => {
-    if (!selectedOrgId || !canView) {
-      return;
-    }
-
+    if (!selectedOrgId || !canView) return;
     setError(null);
-
     const token = await getAccessToken();
-    if (!token) {
-      setError("Sign in before loading campaign data.");
-      return;
-    }
-
+    if (!token) { setError("Sign in first."); return; }
     setLoading(true);
-
-    const [policiesResponse, dashboardResponse] = await Promise.all([
-      fetch(`/api/orgs/${selectedOrgId}/policies`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }),
-      fetch(`/api/orgs/${selectedOrgId}/dashboard`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }),
+    const [pRes, dRes] = await Promise.all([
+      fetch(`/api/orgs/${selectedOrgId}/policies`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`/api/orgs/${selectedOrgId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
     ]);
-
-    const policiesBody = (await policiesResponse.json()) as
-      | PolicyListResponse
-      | { error: { message: string } };
-    const dashboardBody = (await dashboardResponse.json()) as
-      | DashboardResponse
-      | { error: { message: string } };
-
-    if (!policiesResponse.ok) {
-      setError("error" in policiesBody ? policiesBody.error.message : "Failed to load policies.");
-      setLoading(false);
-      return;
-    }
-
-    if (!dashboardResponse.ok) {
-      setError(
-        "error" in dashboardBody ? dashboardBody.error.message : "Failed to load campaign list.",
-      );
-      setLoading(false);
-      return;
-    }
-
-    setPolicies((policiesBody as PolicyListResponse).items);
-    setCampaigns((dashboardBody as DashboardResponse).campaigns);
-    setSelectedPolicyIds((current) =>
-      current.filter((policyId) =>
-        (policiesBody as PolicyListResponse).items.some((item) => item.id === policyId),
-      ),
-    );
+    const pBody = (await pRes.json()) as PolicyListResponse | { error: { message: string } };
+    const dBody = (await dRes.json()) as DashboardResponse | { error: { message: string } };
+    if (!pRes.ok) { setError("error" in pBody ? pBody.error.message : "Failed to load policies."); setLoading(false); return; }
+    if (!dRes.ok) { setError("error" in dBody ? dBody.error.message : "Failed to load campaigns."); setLoading(false); return; }
+    setPolicies((pBody as PolicyListResponse).items);
+    setCampaigns((dBody as DashboardResponse).campaigns);
+    setSelectedPolicyIds((c) => c.filter((id) => (pBody as PolicyListResponse).items.some((i) => i.id === id)));
     setLoading(false);
   }, [canView, selectedOrgId]);
 
   useEffect(() => {
-    if (!selectedOrgId || !canView) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void loadAdminData();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
+    if (!selectedOrgId || !canView) return;
+    const t = window.setTimeout(() => void loadAdminData(), 0);
+    return () => window.clearTimeout(t);
   }, [canView, loadAdminData, selectedOrgId]);
 
   const generate = async () => {
-    setError(null);
-    setStatus(null);
-
-    if (!canGenerate) {
-      setError("Only admin and owner roles can generate campaigns. Next action: request elevated access.");
-      return;
-    }
-
-    if (!selectedOrgId) {
-      setError("Select an organization workspace before generating campaigns.");
-      return;
-    }
-
-    if (selectedPolicyIds.length === 0) {
-      setError("Select at least one parsed policy before generating a campaign.");
-      return;
-    }
-
+    setError(null); setStatus(null);
+    if (!canGenerate) { setError("Admin/owner role required."); return; }
+    if (!selectedOrgId) { setError("Select a workspace."); return; }
+    if (selectedPolicyIds.length === 0) { setError("Select at least one parsed policy."); return; }
     const token = await getAccessToken();
-    if (!token) {
-      setError("Sign in before generating campaigns.");
-      return;
-    }
-
-    const response = await fetch(`/api/orgs/${selectedOrgId}/campaigns/generate`, {
+    if (!token) { setError("Sign in first."); return; }
+    const res = await fetch(`/api/orgs/${selectedOrgId}/campaigns/generate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        name,
-        policyIds: selectedPolicyIds,
-        roleTracks: ["exec", "builder", "general"],
-        dueAt: dueAt || null,
-      }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name, policyIds: selectedPolicyIds, roleTracks: ["exec", "builder", "general"], dueAt: dueAt || null }),
     });
-
-    const body = (await response.json()) as
-      | { campaignId: string; status: string }
-      | { error: { message: string } };
-
-    if (!response.ok) {
-      setError("error" in body ? body.error.message : "Campaign generation failed");
-      return;
-    }
-
-    const successBody = body as { campaignId: string; status: string };
-    setStatus(
-      `Campaign created (${successBody.campaignId}). Next action: open campaign and review modules before publish.`,
-    );
+    const body = (await res.json()) as { campaignId: string; status: string } | { error: { message: string } };
+    if (!res.ok) { setError("error" in body ? body.error.message : "Generation failed"); return; }
+    const s = body as { campaignId: string; status: string };
+    setStatus(`Campaign created (${s.campaignId}). Review modules before publishing.`);
     setDueAt("");
     await loadAdminData();
   };
 
-  const togglePolicy = (policyId: string) => {
-    setSelectedPolicyIds((current) =>
-      current.includes(policyId)
-        ? current.filter((id) => id !== policyId)
-        : [...current, policyId],
-    );
+  const togglePolicy = (id: string) => {
+    setSelectedPolicyIds((c) => c.includes(id) ? c.filter((x) => x !== id) : [...c, id]);
   };
 
   if (!canView) {
-    return (
-      <AdminAccessGate
-        currentRole={selectedMembership?.role}
-        orgName={selectedMembership?.orgName}
-        requiredRole="manager"
-        title="Campaign workspace"
-      />
-    );
+    return <AdminAccessGate currentRole={selectedMembership?.role} orgName={selectedMembership?.orgName} requiredRole="manager" title="Campaign Workspace" />;
   }
 
   return (
-    <section className="mx-auto max-w-6xl space-y-5 rounded-[1.9rem] surface-card p-6 sm:p-7">
-      <SessionStatus />
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Header */}
+      <div className="page-header">
         <div>
-          <h1 className="font-display text-4xl text-[#10244a]">Campaign generation</h1>
-          <p className="mt-2 text-sm text-[#4f6486]">
-            Create and manage campaigns for {selectedMembership?.orgName ?? "your workspace"}.
-          </p>
+          <h1 className="page-title">Campaigns</h1>
+          <p className="page-subtitle">Create and manage training campaigns for {selectedMembership?.orgName ?? "your workspace"}.</p>
         </div>
-        <button
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-[#d2ddef] bg-white px-4 text-sm font-semibold text-[#1f3b67] hover:bg-[#f4f8ff]"
-          onClick={() => void loadAdminData()}
-          type="button"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          {loading ? "Refreshing..." : "Refresh"}
+        <button className="btn btn-secondary btn-sm" onClick={() => void loadAdminData()} type="button">
+          <RefreshCcw className="h-3.5 w-3.5" />
+          {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
+      {/* Generate + info */}
       <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-2xl soft-chip p-5">
-          <h2 className="font-display text-3xl text-[#122d5b]">New draft campaign</h2>
-          <p className="mt-2 text-sm text-[#4f6486]">Build role-ready training modules from parsed policy obligations.</p>
+        <div className="card p-6">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Draft Campaign</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Build role-ready training modules from parsed policy obligations.</p>
 
-          <div className="mt-5 grid gap-3">
-            <label className="space-y-1 text-sm">
-              <span>Campaign name</span>
+          <div className="mt-5 grid gap-4">
+            <div>
+              <label className="text-sm font-medium text-[var(--text-primary)]">Campaign name</label>
               <input
-                className="h-11 rounded-xl border border-[#d3deef] bg-white px-3"
-                onChange={(event) => setName(event.target.value)}
+                className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm"
+                onChange={(e) => setName(e.target.value)}
                 value={name}
               />
-            </label>
-
-            <label className="space-y-1 text-sm">
-              <span>Due at (ISO datetime)</span>
-              <div className="relative">
-                <CalendarClock className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[#6a7fa1]" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[var(--text-primary)]">Due date</label>
+              <div className="relative mt-1">
+                <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-faint)]" />
                 <input
-                  className="h-11 w-full rounded-xl border border-[#d3deef] bg-white pl-9 pr-3"
-                  onChange={(event) => setDueAt(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-white pl-9 pr-3 text-sm"
+                  onChange={(e) => setDueAt(e.target.value)}
                   placeholder="2026-03-01T12:00:00.000Z"
                   value={dueAt}
                 />
               </div>
-            </label>
+            </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-[#10244a]">Source policies</p>
+              <p className="text-sm font-medium text-[var(--text-primary)]">Source Policies</p>
               {readyPolicies.length === 0 ? (
-                <p className="text-sm text-[#4f6486]">Upload and parse at least one policy before generation.</p>
+                <p className="text-sm text-[var(--text-muted)]">Upload and parse at least one policy first.</p>
               ) : (
                 <div className="grid gap-2">
-                  {readyPolicies.map((policy) => (
-                    <label className="flex items-center gap-2 rounded-xl border border-[#d3deef] bg-white px-3 py-2" key={policy.id}>
+                  {readyPolicies.map((p) => (
+                    <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 py-2 hover:bg-[var(--bg-muted)] cursor-pointer" key={p.id}>
                       <input
-                        checked={selectedPolicyIds.includes(policy.id)}
-                        className="accent-[#1f5eff]"
-                        onChange={() => togglePolicy(policy.id)}
+                        checked={selectedPolicyIds.includes(p.id)}
+                        className="accent-[var(--accent)]"
+                        onChange={() => togglePolicy(p.id)}
                         type="checkbox"
                       />
-                      <span className="text-sm text-[#132f61]">{policy.title}</span>
+                      <span className="text-sm text-[var(--text-primary)]">{p.title}</span>
                     </label>
                   ))}
                 </div>
               )}
             </div>
 
-            <button
-              className="mt-1 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1f5eff] text-sm font-semibold text-white hover:bg-[#154ee6] disabled:cursor-not-allowed disabled:opacity-55"
-              disabled={!canGenerate}
-              onClick={() => void generate()}
-              type="button"
-            >
+            <button className="btn btn-primary" disabled={!canGenerate} onClick={() => void generate()} type="button">
               <PlusCircle className="h-4 w-4" />
-              Generate draft campaign
+              Generate Draft Campaign
             </button>
-
-            {!canGenerate ? (
-              <p className="text-xs text-[#7b6182]">Campaign generation is restricted to admin/owner roles.</p>
-            ) : null}
+            {!canGenerate && <p className="text-xs text-[var(--text-faint)]">Admin/owner role required.</p>}
           </div>
         </div>
 
-        <aside className="rounded-2xl border border-[#c9d8ef] bg-[#0f2d66] p-5 text-sm text-[#d9e5ff]">
-          <h3 className="font-display text-2xl text-white">Publishing checklist</h3>
-          <ul className="mt-3 space-y-2">
+        <aside className="card border-[var(--bg-sidebar)] bg-[var(--bg-sidebar)] p-6 text-sm text-slate-300">
+          <h3 className="text-base font-semibold text-white">Publishing Checklist</h3>
+          <ul className="mt-3 space-y-2 text-slate-400">
             <li>Review module copy for policy precision.</li>
             <li>Validate pass score thresholds before publish.</li>
-            <li>Publish with an `Idempotency-Key` for safe retries.</li>
+            <li>Publish with an Idempotency-Key for safe retries.</li>
             <li>Track completion and attestation in dashboard.</li>
           </ul>
         </aside>
       </div>
 
-      {status ? <p className="text-sm text-[#12795c]">{status}</p> : null}
-      {error ? <p className="text-sm text-[#a54f3a]">{error}</p> : null}
+      {status && <p className="rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-2 text-sm text-[var(--success)]">{status}</p>}
+      {error && <p className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-2 text-sm text-[var(--danger)]">{error}</p>}
 
-      <div className="space-y-3">
-        <h2 className="font-display text-3xl text-[#10244a]">Recent campaigns</h2>
+      {/* Campaigns table */}
+      <div className="card overflow-hidden">
+        <div className="border-b border-[var(--border)] px-5 py-4">
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">Recent Campaigns</h2>
+        </div>
         {campaigns.length === 0 ? (
-          <p className="text-sm text-[#4f6486]">No campaigns found for this organization.</p>
+          <p className="p-5 text-sm text-[var(--text-muted)]">No campaigns found.</p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {campaigns.map((campaign) => (
-              <article className="rounded-2xl soft-chip p-4" key={campaign.campaignId}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-[#132f61]">{campaign.name}</p>
-                    <p className="mt-1 text-xs text-[#4f6486]">
-                      Completion {(campaign.completionRate * 100).toFixed(1)}% | Attestation {(campaign.attestationRate * 100).toFixed(1)}%
-                    </p>
-                  </div>
-                  <Link
-                    className="inline-flex rounded-full border border-[#d3deef] bg-white px-3 py-1.5 text-sm font-semibold text-[#1b4277] hover:bg-[#f4f8ff]"
-                    href={withOrg(`/product/admin/campaigns/${campaign.campaignId}`, selectedOrgId)}
-                  >
-                    Open campaign
-                  </Link>
-                </div>
-              </article>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Campaign</th>
+                  <th>Completion</th>
+                  <th>Attestation</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaigns.map((c) => (
+                  <tr key={c.campaignId}>
+                    <td className="font-medium text-[var(--text-primary)]">{c.name}</td>
+                    <td>{(c.completionRate * 100).toFixed(1)}%</td>
+                    <td>{(c.attestationRate * 100).toFixed(1)}%</td>
+                    <td>
+                      <Link className="btn btn-ghost btn-sm" href={withOrg(`/product/admin/campaigns/${c.campaignId}`, selectedOrgId)}>
+                        Open →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }

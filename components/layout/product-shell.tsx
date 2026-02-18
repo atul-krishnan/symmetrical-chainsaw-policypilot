@@ -4,9 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type PropsWithChildren } from "react";
 
-import { ProductNav } from "@/components/layout/product-nav";
+import { AppHeader } from "@/components/layout/app-header";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { OrgProvider, useOrgContext } from "@/lib/edtech/org-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Shell body — handles workspace resolution states
+// ---------------------------------------------------------------------------
 
 function ProductShellBody({ children }: PropsWithChildren) {
   const { loading, error, memberships, requiresSelection, refreshMemberships } = useOrgContext();
@@ -59,52 +65,52 @@ function ProductShellBody({ children }: PropsWithChildren) {
 
   if (loading) {
     return (
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mx-auto max-w-4xl rounded-[1.8rem] surface-card p-6">
-          <h1 className="font-display text-3xl text-[#10244a]">Resolving your workspace</h1>
-          <p className="mt-2 text-sm text-[#4f6486]">Checking your organization memberships and permissions.</p>
-        </section>
+      <main className="flex-1 p-6">
+        <div className="card mx-auto max-w-lg p-8 text-center">
+          <h1 className="page-title">Resolving your workspace</h1>
+          <p className="page-subtitle mt-2">Checking organization memberships and permissions.</p>
+          <div className="mt-6 flex justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+          </div>
+        </div>
       </main>
     );
   }
 
   if (error) {
     return (
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mx-auto max-w-4xl rounded-[1.8rem] border border-[#e2c4b5] bg-white p-6 shadow-[0_20px_45px_rgba(26,45,79,0.08)]">
-          <h1 className="font-display text-3xl text-[#10244a]">Workspace setup required</h1>
-          <p className="mt-2 text-sm text-[#6a4e3f]">{error}</p>
+      <main className="flex-1 p-6">
+        <div className="card mx-auto max-w-lg p-8">
+          <h1 className="page-title">Workspace setup required</h1>
+          <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
-              className="h-10 rounded-xl bg-[#1f5eff] px-4 text-sm font-semibold text-white hover:bg-[#154ee6]"
+              className="btn btn-primary"
               onClick={() => void refreshMemberships()}
               type="button"
             >
               Retry
             </button>
-            <Link
-              className="inline-flex h-10 items-center rounded-xl border border-[#d2ddef] px-4 text-sm font-semibold text-[#10243e] hover:bg-[#f4f8ff]"
-              href="/product/auth"
-            >
+            <Link className="btn btn-secondary" href="/product/auth">
               Go to sign-in
             </Link>
           </div>
-        </section>
+        </div>
       </main>
     );
   }
 
   if (memberships.length === 0) {
     return (
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mx-auto max-w-4xl rounded-[1.8rem] surface-card p-6">
-          <h1 className="font-display text-3xl text-[#10244a]">No organization access yet</h1>
-          <p className="mt-2 text-sm text-[#4f6486]">
+      <main className="flex-1 p-6">
+        <div className="card mx-auto max-w-lg p-8">
+          <h1 className="page-title">No organization access</h1>
+          <p className="page-subtitle mt-2">
             Ask your PolicyPilot admin to add your account to an organization, then refresh this page.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
-              className="h-10 rounded-xl bg-[#1f5eff] px-4 text-sm font-semibold text-white hover:bg-[#154ee6]"
+              className="btn btn-primary"
               onClick={() => void refreshMemberships()}
               type="button"
             >
@@ -112,75 +118,110 @@ function ProductShellBody({ children }: PropsWithChildren) {
             </button>
             {canBootstrapOwner ? (
               <button
-                className="h-10 rounded-xl border border-[#d2ddef] bg-white px-4 text-sm font-semibold text-[#10243e] hover:bg-[#f4f8ff] disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn btn-secondary"
                 disabled={bootstrapLoading}
                 onClick={() => void bootstrapOwner()}
                 type="button"
               >
-                {bootstrapLoading ? "Creating workspace..." : "Bootstrap owner access"}
+                {bootstrapLoading ? "Creating workspace…" : "Bootstrap owner access"}
               </button>
             ) : null}
-            <Link
-              className="inline-flex h-10 items-center rounded-xl border border-[#d2ddef] px-4 text-sm font-semibold text-[#10243e] hover:bg-[#f4f8ff]"
-              href="/product/auth"
-            >
+            <Link className="btn btn-secondary" href="/product/auth">
               Switch account
             </Link>
           </div>
           {canBootstrapOwner ? (
-            <p className="mt-3 text-xs text-[#6079a2]">
+            <p className="mt-3 text-xs text-[var(--text-faint)]">
               Dev helper: creates owner membership for your signed-in user when no org access exists.
             </p>
           ) : null}
-          {bootstrapError ? <p className="mt-2 text-sm text-[#a54f3a]">{bootstrapError}</p> : null}
-        </section>
+          {bootstrapError ? <p className="mt-2 text-sm text-[var(--danger)]">{bootstrapError}</p> : null}
+        </div>
       </main>
     );
   }
 
   if (requiresSelection) {
     return (
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mx-auto max-w-4xl rounded-[1.8rem] surface-card p-6">
-          <h1 className="font-display text-3xl text-[#10244a]">Choose an organization</h1>
-          <p className="mt-2 text-sm text-[#4f6486]">
-            Select the organization workspace from the top navigation before starting admin actions.
+      <main className="flex-1 p-6">
+        <div className="card mx-auto max-w-lg p-8">
+          <h1 className="page-title">Choose an organization</h1>
+          <p className="page-subtitle mt-2">
+            Select a workspace from the sidebar before proceeding.
           </p>
-        </section>
+        </div>
       </main>
     );
   }
 
-  return <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>;
+  return <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>;
 }
+
+// ---------------------------------------------------------------------------
+// Shell — wraps everything with sidebar + header
+// ---------------------------------------------------------------------------
 
 export function ProductShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/product/auth");
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Auth route — no sidebar, centered layout
   if (isAuthRoute) {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[#f4f7fd]">
-        <div className="pointer-events-none absolute inset-0 -z-10 app-grid" />
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-[-14rem] top-[-8rem] h-[34rem] w-[34rem] rounded-full bg-[#2f6dff1a] blur-3xl" />
-          <div className="absolute right-[-12rem] top-28 h-[30rem] w-[30rem] rounded-full bg-[#17a6ff1a] blur-3xl" />
-        </div>
-        <main className="px-4 py-8 sm:px-6 lg:px-8">{children}</main>
+      <div className="min-h-screen bg-[var(--bg-main)]">
+        <main className="flex min-h-screen items-center justify-center px-4 py-8">
+          {children}
+        </main>
       </div>
     );
   }
 
   return (
     <OrgProvider>
-      <div className="relative min-h-screen overflow-hidden bg-[#f4f7fd]">
-        <div className="pointer-events-none absolute inset-0 -z-10 app-grid" />
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-[-14rem] top-[-8rem] h-[34rem] w-[34rem] rounded-full bg-[#2f6dff1a] blur-3xl" />
-          <div className="absolute right-[-12rem] top-28 h-[30rem] w-[30rem] rounded-full bg-[#17a6ff1a] blur-3xl" />
+      <div className="flex min-h-screen bg-[var(--bg-main)]">
+        {/* Mobile overlay */}
+        {mobileOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+
+        {/* Sidebar — hidden on mobile unless toggled */}
+        <div className={cn("hidden lg:block", mobileOpen && "!block")}>
+          <AppSidebar
+            collapsed={collapsed}
+            onToggle={() => {
+              if (window.innerWidth < 1024) {
+                setMobileOpen(false);
+              } else {
+                setCollapsed((v) => !v);
+              }
+            }}
+          />
         </div>
-        <ProductNav />
-        <ProductShellBody>{children}</ProductShellBody>
+
+        {/* Content area — offset by sidebar width */}
+        <div
+          className={cn(
+            "flex min-h-screen flex-1 flex-col transition-all duration-200",
+            collapsed ? "lg:ml-16" : "lg:ml-[260px]",
+          )}
+        >
+          <AppHeader
+            sidebarCollapsed={collapsed}
+            onToggleSidebar={() => {
+              if (window.innerWidth < 1024) {
+                setMobileOpen((v) => !v);
+              } else {
+                setCollapsed((v) => !v);
+              }
+            }}
+          />
+          <ProductShellBody>{children}</ProductShellBody>
+        </div>
       </div>
     </OrgProvider>
   );
