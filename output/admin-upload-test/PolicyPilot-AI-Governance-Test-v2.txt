@@ -1,0 +1,46 @@
+PolicyPilot Test Policy
+AI Governance and Responsible Use Standard
+Version: 2.0
+Effective Date: 2026-02-19
+Owner: Security and GRC
+
+1. Purpose
+This policy defines mandatory controls for safe, compliant, and auditable use of AI systems.
+
+2. Scope    
+This policy applies to all employees, contractors, and systems that use AI for business operations.
+
+3. Role-Based Obligations
+
+3.1 Executive Obligations (Role Track: exec)
+- Approve high-risk AI use cases before production launch.
+- Ensure each business unit maintains an AI risk register reviewed monthly.
+- Require documented human oversight for customer-impacting AI decisions.
+- Escalate unresolved AI compliance risks to Security and Legal within 24 hours.
+
+3.2 Builder Obligations (Role Track: builder)
+- Do not use unapproved datasets for model training, tuning, or prompt context.
+- Log model and prompt changes in the engineering change record before deployment.
+- Implement output validation and safety checks for all user-facing AI responses.
+- Block production deployment when policy checks or governance gates fail.
+- Redact secrets and personal data from prompts unless an approved exception exists.
+
+3.3 General Workforce Obligations (Role Track: general)
+- Use only approved AI tools for business tasks.
+- Never paste confidential, regulated, or customer-sensitive data into non-approved tools.
+- Verify AI-generated output before sharing externally or using it for decisions.
+- Report suspicious, harmful, or policy-violating AI behavior to Security immediately.
+
+4. Mandatory Control Requirements
+- Control AI-01: Approved Use Boundaries
+  All AI use must align to approved use cases and data boundaries.
+- Control AI-02: Human Oversight
+  Customer-impacting outputs require documented human review and sign-off.
+- Control AI-03: Adoption Evidence
+  Completion, acknowledgment, quiz, and attestation records must be retained for audit.
+
+5. Enforcement
+Violations may result in access restriction, corrective actions, and formal escalation.
+
+6. Audit and Review
+This policy is reviewed quarterly or after significant regulatory or business changes.
