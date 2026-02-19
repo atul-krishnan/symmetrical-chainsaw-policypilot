@@ -7,10 +7,6 @@ import { requireOrgAccess } from "@/lib/edtech/db";
 import { markCampaignEvidenceStale } from "@/lib/edtech/evidence";
 import { computeQuizSyncHash, quizNeedsRegeneration } from "@/lib/edtech/quiz-sync";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import {
-  isMissingOptionalSchemaError,
-  shouldIgnoreOptionalSchemaErrors,
-} from "@/lib/edtech/schema-compat";
 import { moduleMediaEmbedSchema } from "@/lib/edtech/types";
 import { campaignUpdateSchema } from "@/lib/edtech/validation";
 
@@ -112,10 +108,7 @@ export async function GET(
         .eq("campaign_id", campaignId),
     ]);
 
-    const readinessErrors = [mappingsResult.error, controlsResult.error, evidenceResult.error];
-    const readinessSchemaMissing = shouldIgnoreOptionalSchemaErrors(readinessErrors);
-
-    if (readinessErrors.some((item) => Boolean(item)) && !readinessSchemaMissing) {
+    if (mappingsResult.error || controlsResult.error || evidenceResult.error) {
       throw new ApiError(
         "DB_ERROR",
         mappingsResult.error?.message ??
@@ -126,13 +119,11 @@ export async function GET(
       );
     }
 
-    const mappedControlIds = new Set(
-      (readinessSchemaMissing ? [] : mappingsResult.data ?? []).map((item) => item.control_id),
-    );
-    const totalControls = readinessSchemaMissing ? 0 : controlsResult.count ?? 0;
+    const mappedControlIds = new Set((mappingsResult.data ?? []).map((item) => item.control_id));
+    const totalControls = controlsResult.count ?? 0;
     const statusCounts: Record<"queued" | "synced" | "rejected" | "stale" | "superseded", number> =
       { queued: 0, synced: 0, rejected: 0, stale: 0, superseded: 0 };
-    for (const item of (readinessSchemaMissing ? [] : evidenceResult.data ?? [])) {
+    for (const item of evidenceResult.data ?? []) {
       const status = item.evidence_status;
       if (status && status in statusCounts) {
         statusCounts[status as keyof typeof statusCounts] += 1;
@@ -258,7 +249,6 @@ export async function PUT(
 
     let markedStaleModules = 0;
     let markedStaleEvidence = 0;
-    let skippedEvidenceStaleUpdate = false;
 
     if (parsed.data.modules) {
       for (const moduleInput of parsed.data.modules) {
@@ -364,18 +354,11 @@ export async function PUT(
     }
 
     if (markedStaleModules > 0) {
-      try {
-        markedStaleEvidence = await markCampaignEvidenceStale({
-          supabase,
-          orgId,
-          campaignId,
-        });
-      } catch (error) {
-        if (!isMissingOptionalSchemaError(error)) {
-          throw error;
-        }
-        skippedEvidenceStaleUpdate = true;
-      }
+      markedStaleEvidence = await markCampaignEvidenceStale({
+        supabase,
+        orgId,
+        campaignId,
+      });
     }
 
     await writeRequestAuditLog({
@@ -391,7 +374,6 @@ export async function PUT(
         updatedModules: parsed.data.modules?.length ?? 0,
         markedStaleModules,
         markedStaleEvidence,
-        skippedEvidenceStaleUpdate,
       },
     });
 

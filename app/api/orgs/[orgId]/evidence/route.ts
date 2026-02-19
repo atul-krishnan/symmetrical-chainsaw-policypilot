@@ -2,7 +2,6 @@ import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { shouldIgnoreOptionalSchemaErrors } from "@/lib/edtech/schema-compat";
 import { evidenceQuerySchema } from "@/lib/edtech/validation";
 
 export async function GET(
@@ -50,12 +49,11 @@ export async function GET(
 
     const evidenceResult = await query;
 
-    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors([evidenceResult.error]);
-    if (evidenceResult.error && !optionalSchemaMissing) {
+    if (evidenceResult.error) {
       throw new ApiError("DB_ERROR", evidenceResult.error.message, 500);
     }
 
-    const evidenceRows = optionalSchemaMissing ? [] : evidenceResult.data ?? [];
+    const evidenceRows = evidenceResult.data ?? [];
     const evidenceIds = evidenceRows.map((row) => row.id);
 
     const latestEventsByEvidenceId = new Map<
@@ -122,7 +120,6 @@ export async function GET(
         total: evidenceRows.length,
         statusCounts,
       },
-      migrationPending: optionalSchemaMissing,
       items: evidenceRows.map((row) => {
         const control = Array.isArray(row.controls) ? row.controls[0] : row.controls;
         return {

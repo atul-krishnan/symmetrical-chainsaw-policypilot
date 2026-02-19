@@ -2,7 +2,6 @@ import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { shouldIgnoreOptionalSchemaErrors } from "@/lib/edtech/schema-compat";
 
 type EvidenceCounters = {
   total: number;
@@ -57,14 +56,12 @@ export async function GET(
       );
     }
 
-    const optionalSchemaErrors = [
-      frameworksResult.error,
-      controlsResult.error,
-      mappingsResult.error,
-      evidenceResult.error,
-    ];
-    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors(optionalSchemaErrors);
-    if (optionalSchemaErrors.some((item) => Boolean(item)) && !optionalSchemaMissing) {
+    if (
+      frameworksResult.error ||
+      controlsResult.error ||
+      mappingsResult.error ||
+      evidenceResult.error
+    ) {
       throw new ApiError(
         "DB_ERROR",
         frameworksResult.error?.message ??
@@ -76,17 +73,30 @@ export async function GET(
       );
     }
 
-    const frameworks = optionalSchemaMissing ? [] : frameworksResult.data ?? [];
-    const controls = optionalSchemaMissing ? [] : controlsResult.data ?? [];
-    const mappings = (optionalSchemaMissing ? [] : mappingsResult.data ?? []).filter((item) => item.active);
-    const evidence = optionalSchemaMissing ? [] : evidenceResult.data ?? [];
+    const frameworks = frameworksResult.data ?? [];
+    const controls = controlsResult.data ?? [];
+    const mappings = (mappingsResult.data ?? []).filter((item) => item.active);
+    const evidence = evidenceResult.data ?? [];
     const campaigns = campaignsResult.data ?? [];
 
     const frameworkById = new Map(frameworks.map((framework) => [framework.id, framework]));
 
     const mappingCounts = new Map<string, number>();
+    const activeCampaignByControl = new Map<string, string>();
+    const activeStrengthByControl = new Map<string, "primary" | "supporting">();
     for (const mapping of mappings) {
       mappingCounts.set(mapping.control_id, (mappingCounts.get(mapping.control_id) ?? 0) + 1);
+
+      if (mapping.campaign_id && !activeCampaignByControl.has(mapping.control_id)) {
+        activeCampaignByControl.set(mapping.control_id, mapping.campaign_id);
+      }
+
+      if (
+        (mapping.mapping_strength === "primary" || mapping.mapping_strength === "supporting") &&
+        !activeStrengthByControl.has(mapping.control_id)
+      ) {
+        activeStrengthByControl.set(mapping.control_id, mapping.mapping_strength);
+      }
     }
 
     const evidenceStatsByControl = new Map<string, EvidenceCounters>();
@@ -137,6 +147,8 @@ export async function GET(
             }
           : null,
         mappingCount: mappingCounts.get(control.id) ?? 0,
+        activeCampaignId: activeCampaignByControl.get(control.id) ?? null,
+        activeMappingStrength: activeStrengthByControl.get(control.id) ?? null,
         evidence: evidenceStats,
       };
     });
@@ -167,7 +179,6 @@ export async function GET(
         mappedControls: mappedControlIds.size,
         coverageRatio,
       },
-      migrationPending: optionalSchemaMissing,
     };
   });
 }

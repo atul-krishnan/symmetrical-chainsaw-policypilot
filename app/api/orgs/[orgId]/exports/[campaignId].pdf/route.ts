@@ -5,10 +5,6 @@ import { computeCampaignMetrics } from "@/lib/edtech/dashboard";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { createEvidenceObjects } from "@/lib/edtech/evidence";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import {
-  isMissingOptionalSchemaError,
-  shouldIgnoreOptionalSchemaErrors,
-} from "@/lib/edtech/schema-compat";
 import { logError, logInfo } from "@/lib/observability/logger";
 import { createRequestContext } from "@/lib/observability/request-context";
 
@@ -87,9 +83,7 @@ export async function GET(
       );
     }
 
-    const optionalSchemaErrors = [mappingsResult.error, syncEventsResult.error];
-    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors(optionalSchemaErrors);
-    if (optionalSchemaErrors.some((item) => Boolean(item)) && !optionalSchemaMissing) {
+    if (mappingsResult.error || syncEventsResult.error) {
       throw new ApiError(
         "DB_ERROR",
         mappingsResult.error?.message ??
@@ -102,7 +96,7 @@ export async function GET(
     const assignments = assignmentResult.data ?? [];
     const attempts = attemptResult.data ?? [];
     const attestations = attestationResult.data ?? [];
-    const mappings = optionalSchemaMissing ? [] : mappingsResult.data ?? [];
+    const mappings = mappingsResult.data ?? [];
 
     const controlIds = new Set<string>();
     for (const mapping of mappings) {
@@ -112,7 +106,7 @@ export async function GET(
     }
 
     const latestSyncByProvider = new Map<string, string>();
-    for (const event of (optionalSchemaMissing ? [] : syncEventsResult.data ?? [])) {
+    for (const event of syncEventsResult.data ?? []) {
       if (!latestSyncByProvider.has(event.provider)) {
         latestSyncByProvider.set(event.provider, event.status);
       }
@@ -166,27 +160,21 @@ export async function GET(
       throw new ApiError("DB_ERROR", exportInsert.error?.message ?? "Export insert failed", 500);
     }
 
-    try {
-      await createEvidenceObjects({
-        supabase,
-        orgId,
-        campaignId,
-        userId: user.id,
-        evidenceType: "campaign_export",
-        sourceTable: "audit_exports",
-        sourceId: exportInsert.data.id,
-        confidenceScore: 0.99,
-        qualityScore: 96,
-        metadata: {
-          exportType: "pdf",
-          checksum: pdf.checksum,
-        },
-      });
-    } catch (error) {
-      if (!isMissingOptionalSchemaError(error)) {
-        throw error;
-      }
-    }
+    await createEvidenceObjects({
+      supabase,
+      orgId,
+      campaignId,
+      userId: user.id,
+      evidenceType: "campaign_export",
+      sourceTable: "audit_exports",
+      sourceId: exportInsert.data.id,
+      confidenceScore: 0.99,
+      qualityScore: 96,
+      metadata: {
+        exportType: "pdf",
+        checksum: pdf.checksum,
+      },
+    });
 
     await writeRequestAuditLog({
       supabase,

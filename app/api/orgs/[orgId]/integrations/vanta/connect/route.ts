@@ -4,7 +4,6 @@ import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { upsertIntegrationConnection } from "@/lib/edtech/integration-connect";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { isMissingOptionalSchemaError } from "@/lib/edtech/schema-compat";
 import { integrationConnectSchema } from "@/lib/edtech/validation";
 
 export async function POST(
@@ -27,28 +26,16 @@ export async function POST(
       );
     }
 
-    let connection;
-    try {
-      connection = await upsertIntegrationConnection({
-        supabase,
-        orgId,
-        provider: "vanta",
-        userId: user.id,
-        apiKey: parsed.data.apiKey,
-        accountId: parsed.data.accountId,
-        workspaceId: parsed.data.workspaceId,
-        scopes: parsed.data.scopes,
-      });
-    } catch (error) {
-      if (isMissingOptionalSchemaError(error)) {
-        throw new ApiError(
-          "CONFLICT",
-          "Controls & integrations schema is not applied yet. Run migration 20260220_edtech_controls_integrations.sql.",
-          409,
-        );
-      }
-      throw error;
-    }
+    const connection = await upsertIntegrationConnection({
+      supabase,
+      orgId,
+      provider: "vanta",
+      userId: user.id,
+      apiKey: parsed.data.apiKey,
+      accountId: parsed.data.accountId,
+      workspaceId: parsed.data.workspaceId,
+      scopes: parsed.data.scopes,
+    });
 
     await writeRequestAuditLog({
       supabase,

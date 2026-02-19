@@ -9,7 +9,6 @@ import { requireUserAndClient } from "@/lib/edtech/db";
 import { createEvidenceObjects } from "@/lib/edtech/evidence";
 import { enforceRateLimit } from "@/lib/edtech/rate-limit";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { isMissingOptionalSchemaError } from "@/lib/edtech/schema-compat";
 import { attestationSchema } from "@/lib/edtech/validation";
 import { logInfo } from "@/lib/observability/logger";
 
@@ -108,28 +107,22 @@ export async function POST(
       );
     }
 
-    try {
-      await createEvidenceObjects({
-        supabase,
-        orgId: campaignResult.data.org_id,
-        campaignId,
-        userId: user.id,
-        evidenceType: "attestation",
-        sourceTable: "attestations",
-        sourceId: `${campaignId}:${user.id}`,
-        occurredAtIso: acceptedAtIso,
-        confidenceScore: 0.98,
-        qualityScore: 96,
-        metadata: {
-          checksum,
-          signatureName: parsed.data.signatureName,
-        },
-      });
-    } catch (error) {
-      if (!isMissingOptionalSchemaError(error)) {
-        throw error;
-      }
-    }
+    await createEvidenceObjects({
+      supabase,
+      orgId: campaignResult.data.org_id,
+      campaignId,
+      userId: user.id,
+      evidenceType: "attestation",
+      sourceTable: "attestations",
+      sourceId: `${campaignId}:${user.id}`,
+      occurredAtIso: acceptedAtIso,
+      confidenceScore: 0.98,
+      qualityScore: 96,
+      metadata: {
+        checksum,
+        signatureName: parsed.data.signatureName,
+      },
+    });
 
     logInfo("attestation_completed", {
       request_id: requestId,

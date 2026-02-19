@@ -3,7 +3,6 @@ import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireUserAndClient } from "@/lib/edtech/db";
 import { createEvidenceObjects } from "@/lib/edtech/evidence";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { isMissingOptionalSchemaError } from "@/lib/edtech/schema-compat";
 
 export async function POST(
   request: Request,
@@ -59,29 +58,23 @@ export async function POST(
       }
     }
 
-    try {
-      await createEvidenceObjects({
-        supabase,
-        orgId: assignment.org_id,
-        campaignId: assignment.campaign_id,
-        moduleId: assignment.module_id,
-        assignmentId: assignment.id,
-        userId: assignment.user_id,
-        evidenceType: "material_acknowledgment",
-        sourceTable: "assignments",
-        sourceId: assignment.id,
-        occurredAtIso: acknowledgedAt,
-        confidenceScore: 0.95,
-        qualityScore: 90,
-        metadata: {
-          flowVersion,
-        },
-      });
-    } catch (error) {
-      if (!isMissingOptionalSchemaError(error)) {
-        throw error;
-      }
-    }
+    await createEvidenceObjects({
+      supabase,
+      orgId: assignment.org_id,
+      campaignId: assignment.campaign_id,
+      moduleId: assignment.module_id,
+      assignmentId: assignment.id,
+      userId: assignment.user_id,
+      evidenceType: "material_acknowledgment",
+      sourceTable: "assignments",
+      sourceId: assignment.id,
+      occurredAtIso: acknowledgedAt,
+      confidenceScore: 0.95,
+      qualityScore: 90,
+      metadata: {
+        flowVersion,
+      },
+    });
 
     await writeRequestAuditLog({
       supabase,

@@ -3,7 +3,6 @@ import { withApiHandler } from "@/lib/api/route-helpers";
 import { computeCampaignMetrics } from "@/lib/edtech/dashboard";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { shouldIgnoreOptionalSchemaErrors } from "@/lib/edtech/schema-compat";
 
 type EvidenceStatusCounters = {
   queued: number;
@@ -106,15 +105,12 @@ export async function GET(
         .eq("org_id", orgId),
     ]);
 
-    const optionalSchemaErrors = [
-      controlsResult.error,
-      mappingsResult.error,
-      evidenceResult.error,
-      connectionsResult.error,
-    ];
-    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors(optionalSchemaErrors);
-
-    if (optionalSchemaErrors.some((item) => Boolean(item)) && !optionalSchemaMissing) {
+    if (
+      controlsResult.error ||
+      mappingsResult.error ||
+      evidenceResult.error ||
+      connectionsResult.error
+    ) {
       throw new ApiError(
         "DB_ERROR",
         controlsResult.error?.message ??
@@ -126,8 +122,8 @@ export async function GET(
       );
     }
 
-    const controls = optionalSchemaMissing ? [] : controlsResult.data ?? [];
-    const mappings = optionalSchemaMissing ? [] : mappingsResult.data ?? [];
+    const controls = controlsResult.data ?? [];
+    const mappings = mappingsResult.data ?? [];
     const mappedControlIds = new Set(mappings.map((item) => item.control_id));
     const controlCoverage = {
       totalControls: controls.length,
@@ -144,7 +140,7 @@ export async function GET(
     };
     const evidenceByControl = new Map<string, EvidenceStatusCounters>();
 
-    for (const evidence of optionalSchemaMissing ? [] : evidenceResult.data ?? []) {
+    for (const evidence of evidenceResult.data ?? []) {
       const status = evidence.evidence_status;
       if (status && status in evidenceStatusCounts) {
         evidenceStatusCounts[status as keyof EvidenceStatusCounters] += 1;
@@ -195,7 +191,7 @@ export async function GET(
       .sort((a, b) => b.riskIndex - a.riskIndex)
       .slice(0, 10);
 
-    const integrationHealth = (optionalSchemaMissing ? [] : connectionsResult.data ?? []).map((item) => ({
+    const integrationHealth = (connectionsResult.data ?? []).map((item) => ({
       provider: item.provider,
       status: item.status,
       lastSyncAt: item.last_sync_at,

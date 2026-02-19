@@ -38,6 +38,8 @@ type ControlsResponse = {
       version: string;
     } | null;
     mappingCount: number;
+    activeCampaignId: string | null;
+    activeMappingStrength: MappingStrength | null;
     evidence: {
       total: number;
       queued: number;
@@ -226,12 +228,10 @@ export default function ControlsPage() {
     setMappingDrafts((prev) => {
       const next = { ...prev };
       for (const item of parsedControls.controls) {
-        if (!next[item.id]) {
-          next[item.id] = {
-            campaignId: "",
-            mappingStrength: "supporting",
-          };
-        }
+        next[item.id] = {
+          campaignId: item.activeCampaignId ?? "",
+          mappingStrength: item.activeMappingStrength ?? "supporting",
+        };
       }
       return next;
     });
@@ -350,6 +350,11 @@ export default function ControlsPage() {
     }
 
     const draft = mappingDrafts[controlId] ?? { campaignId: "", mappingStrength: "supporting" as const };
+
+    if (!clear && !draft.campaignId) {
+      setError("Select a campaign before saving a control mapping.");
+      return;
+    }
 
     const mappings = clear || !draft.campaignId
       ? []
@@ -535,6 +540,8 @@ export default function ControlsPage() {
                 {controls.map((control) => {
                   const draft = mappingDrafts[control.id] ?? { campaignId: "", mappingStrength: "supporting" as const };
                   const saving = savingControlId === control.id;
+                  const canSave = canManage && !saving && Boolean(draft.campaignId);
+                  const canClear = canManage && !saving && control.mappingCount > 0;
                   return (
                     <tr key={control.id}>
                       <td>
@@ -583,7 +590,7 @@ export default function ControlsPage() {
 
                           <button
                             className="btn btn-ghost btn-sm"
-                            disabled={!canManage || saving}
+                            disabled={!canSave}
                             onClick={() => void saveMapping(control.id, false)}
                             type="button"
                           >
@@ -592,7 +599,7 @@ export default function ControlsPage() {
 
                           <button
                             className="btn btn-ghost btn-sm"
-                            disabled={!canManage || saving}
+                            disabled={!canClear}
                             onClick={() => void saveMapping(control.id, true)}
                             type="button"
                           >

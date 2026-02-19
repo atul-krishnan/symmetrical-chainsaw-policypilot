@@ -2,7 +2,6 @@ import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
-import { shouldIgnoreOptionalSchemaErrors } from "@/lib/edtech/schema-compat";
 import { integrationProviderSchema } from "@/lib/edtech/validation";
 
 export async function GET(
@@ -35,12 +34,7 @@ export async function GET(
         .limit(25),
     ]);
 
-    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors([
-      connectionResult.error,
-      jobsResult.error,
-    ]);
-
-    if ((connectionResult.error || jobsResult.error) && !optionalSchemaMissing) {
+    if (connectionResult.error || jobsResult.error) {
       throw new ApiError(
         "DB_ERROR",
         connectionResult.error?.message ?? jobsResult.error?.message ?? "Failed to load sync jobs",
@@ -48,7 +42,7 @@ export async function GET(
       );
     }
 
-    const jobs = optionalSchemaMissing ? [] : jobsResult.data ?? [];
+    const jobs = jobsResult.data ?? [];
 
     const jobIds = jobs.map((job) => job.id);
     const latestEventsByJob = new Map<string, { provider: string; status: string; createdAt: string }>();
@@ -63,9 +57,7 @@ export async function GET(
         .order("created_at", { ascending: false });
 
       if (eventsResult.error) {
-        if (!shouldIgnoreOptionalSchemaErrors([eventsResult.error])) {
-          throw new ApiError("DB_ERROR", eventsResult.error.message, 500);
-        }
+        throw new ApiError("DB_ERROR", eventsResult.error.message, 500);
       }
 
       for (const event of eventsResult.data ?? []) {
@@ -115,7 +107,6 @@ export async function GET(
             updatedAt: connectionResult.data.updated_at,
           }
         : null,
-      migrationPending: optionalSchemaMissing,
       jobs: jobs.map((job) => ({
         id: job.id,
         status: job.status,
