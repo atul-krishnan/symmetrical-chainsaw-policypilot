@@ -22,9 +22,11 @@ function withOrg(path: string, orgId: string | null): string {
 }
 
 const NAV_ITEMS: Array<{ href: string; label: string; minRole: OrgRole }> = [
-  { href: "/product/admin/policies", label: "Policies", minRole: "manager" },
-  { href: "/product/admin/campaigns", label: "Campaigns", minRole: "admin" },
   { href: "/product/admin/dashboard", label: "Dashboard", minRole: "manager" },
+  { href: "/product/admin/policies", label: "Policies", minRole: "manager" },
+  { href: "/product/admin/controls", label: "Controls & Evidence", minRole: "manager" },
+  { href: "/product/admin/integrations", label: "Integrations", minRole: "manager" },
+  { href: "/product/admin/campaigns", label: "Campaigns", minRole: "admin" },
   { href: "/product/learn", label: "Learner", minRole: "learner" },
 ];
 

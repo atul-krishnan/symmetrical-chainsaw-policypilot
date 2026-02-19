@@ -57,6 +57,18 @@ type Campaign = {
   flowVersion: 1 | 2;
   roleTracks: string[];
   publishedAt: string | null;
+  controlMappingReadiness?: {
+    totalControls: number;
+    mappedControls: number;
+    coverageRatio: number;
+    evidenceStatusCounts: {
+      queued: number;
+      synced: number;
+      rejected: number;
+      stale: number;
+      superseded: number;
+    };
+  };
 };
 
 type CampaignDetail = {
@@ -118,6 +130,18 @@ function normalizeCampaignDetail(input: CampaignDetail): CampaignDetail {
     campaign: {
       ...input.campaign,
       flowVersion: input.campaign.flowVersion ?? 1,
+      controlMappingReadiness: input.campaign.controlMappingReadiness ?? {
+        totalControls: 0,
+        mappedControls: 0,
+        coverageRatio: 0,
+        evidenceStatusCounts: {
+          queued: 0,
+          synced: 0,
+          rejected: 0,
+          stale: 0,
+          superseded: 0,
+        },
+      },
     },
     modules: input.modules.map((module) => ({
       ...module,
@@ -644,6 +668,35 @@ export default function CampaignEditorPage() {
                     ))}
                   </span>
                 </div>
+
+                {campaign.controlMappingReadiness && (
+                  <div className="rounded-xl border border-[#d3deef] bg-[#f7faff] px-4 py-3 text-xs text-[#3f577a]">
+                    <p className="font-semibold text-[#10244a]">Control Impact Preview</p>
+                    <div className="mt-1 flex flex-wrap gap-3">
+                      <span>
+                        Mapped controls:{" "}
+                        <strong>
+                          {campaign.controlMappingReadiness.mappedControls}/
+                          {campaign.controlMappingReadiness.totalControls}
+                        </strong>
+                      </span>
+                      <span>
+                        Coverage:{" "}
+                        <strong>
+                          {(campaign.controlMappingReadiness.coverageRatio * 100).toFixed(1)}%
+                        </strong>
+                      </span>
+                      <span>
+                        Synced evidence:{" "}
+                        <strong>{campaign.controlMappingReadiness.evidenceStatusCounts.synced}</strong>
+                      </span>
+                      <span>
+                        Stale evidence:{" "}
+                        <strong>{campaign.controlMappingReadiness.evidenceStatusCounts.stale}</strong>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action buttons */}

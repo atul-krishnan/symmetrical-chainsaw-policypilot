@@ -2,6 +2,8 @@ export type OrgRole = "owner" | "admin" | "manager" | "learner";
 
 export type RoleTrack = "exec" | "builder" | "general";
 export type LearningFlowVersion = 1 | 2;
+export type ControlRiskLevel = "low" | "medium" | "high";
+export type EvidenceStatus = "queued" | "synced" | "rejected" | "stale" | "superseded";
 
 export type PolicyDocument = {
   id: string;
@@ -142,6 +144,103 @@ export type CampaignMetrics = {
   completionRate: number;
   attestationRate: number;
   averageScore: number;
+};
+
+export type ControlFramework = {
+  id: string;
+  orgId: string;
+  name: string;
+  version: string;
+  source: "template" | "custom";
+  metadataJson: Record<string, unknown>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Control = {
+  id: string;
+  orgId: string;
+  frameworkId: string | null;
+  code: string;
+  title: string;
+  description: string;
+  riskLevel: ControlRiskLevel;
+  metadataJson: Record<string, unknown>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ControlMapping = {
+  id: string;
+  orgId: string;
+  controlId: string;
+  campaignId: string | null;
+  moduleId: string | null;
+  policyId: string | null;
+  obligationId: string | null;
+  mappingStrength: "primary" | "supporting";
+  active: boolean;
+  metadataJson: Record<string, unknown>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EvidenceObject = {
+  id: string;
+  orgId: string;
+  controlId: string | null;
+  campaignId: string | null;
+  moduleId: string | null;
+  assignmentId: string | null;
+  userId: string | null;
+  evidenceType:
+    | "material_acknowledgment"
+    | "quiz_attempt"
+    | "quiz_pass"
+    | "attestation"
+    | "campaign_export";
+  evidenceStatus: EvidenceStatus;
+  confidenceScore: number;
+  qualityScore: number;
+  checksum: string;
+  sourceTable: string;
+  sourceId: string;
+  metadataJson: Record<string, unknown>;
+  occurredAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ConnectorConfig = {
+  id: string;
+  orgId: string;
+  provider: "vanta" | "drata";
+  status: "connected" | "disconnected" | "error";
+  scopes: string[];
+  configJson: Record<string, unknown>;
+  healthMessage: string | null;
+  lastSyncAt: string | null;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncJob = {
+  id: string;
+  orgId: string;
+  provider: "vanta" | "drata";
+  status: "queued" | "running" | "completed" | "failed" | "partial";
+  trigger: "manual" | "scheduled" | "retry";
+  statsJson: Record<string, unknown>;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdBy: string;
+  createdAt: string;
 };
 
 export type UserProfile = {

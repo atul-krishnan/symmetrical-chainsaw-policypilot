@@ -62,6 +62,55 @@ export const moduleMediaUploadSchema = z.object({
   embedId: z.string().uuid(),
 });
 
+export const controlFrameworkTemplateSchema = z.enum(["soc2", "iso27001", "ai_governance"]);
+
+export const controlFrameworkImportSchema = z.object({
+  templates: z.array(controlFrameworkTemplateSchema).min(1).max(3),
+});
+
+export const controlMappingInputSchema = z
+  .object({
+    campaignId: z.string().uuid().nullable().optional(),
+    moduleId: z.string().uuid().nullable().optional(),
+    policyId: z.string().uuid().nullable().optional(),
+    obligationId: z.string().uuid().nullable().optional(),
+    mappingStrength: z.enum(["primary", "supporting"]).default("supporting"),
+    active: z.boolean().default(true),
+  })
+  .refine(
+    (value) =>
+      Boolean(value.campaignId || value.moduleId || value.policyId || value.obligationId),
+    {
+      message: "Each mapping must include at least one target reference",
+    },
+  );
+
+export const controlMappingUpdateSchema = z.object({
+  mappings: z.array(controlMappingInputSchema).max(64),
+});
+
+export const evidenceQuerySchema = z.object({
+  controlId: z.string().uuid().optional(),
+  campaignId: z.string().uuid().optional(),
+  status: z.enum(["queued", "synced", "rejected", "stale", "superseded"]).optional(),
+});
+
+export const integrationConnectSchema = z.object({
+  apiKey: z.string().min(8).max(300),
+  accountId: z.string().min(2).max(120).optional(),
+  workspaceId: z.string().min(2).max(120).optional(),
+  scopes: z.array(z.string().min(1).max(120)).max(20).optional(),
+});
+
+export const integrationProviderSchema = z.enum(["vanta", "drata"]);
+
+export const integrationSyncSchema = z.object({
+  evidenceStatus: z
+    .enum(["queued", "stale", "rejected", "synced", "superseded"])
+    .default("queued"),
+  limit: z.number().int().min(1).max(500).default(200),
+});
+
 export const bootstrapOwnerSchema = z.object({
   orgName: z.string().trim().min(3).max(80).optional(),
 });

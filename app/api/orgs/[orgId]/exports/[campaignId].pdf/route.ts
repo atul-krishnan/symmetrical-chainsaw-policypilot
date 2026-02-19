@@ -3,7 +3,12 @@ import { ANALYTICS_EVENTS } from "@/lib/analytics/events";
 import { buildSignedPdfSummary } from "@/lib/edtech/audit-export";
 import { computeCampaignMetrics } from "@/lib/edtech/dashboard";
 import { requireOrgAccess } from "@/lib/edtech/db";
+import { createEvidenceObjects } from "@/lib/edtech/evidence";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
+import {
+  isMissingOptionalSchemaError,
+  shouldIgnoreOptionalSchemaErrors,
+} from "@/lib/edtech/schema-compat";
 import { logError, logInfo } from "@/lib/observability/logger";
 import { createRequestContext } from "@/lib/observability/request-context";
 
@@ -17,7 +22,15 @@ export async function GET(
   try {
     const { supabase, user } = await requireOrgAccess(request, orgId, "admin");
 
-    const [campaignResult, assignmentResult, attemptResult, attestationResult, orgResult] =
+    const [
+      campaignResult,
+      assignmentResult,
+      attemptResult,
+      attestationResult,
+      orgResult,
+      mappingsResult,
+      syncEventsResult,
+    ] =
       await Promise.all([
         supabase
           .from("learning_campaigns")
@@ -41,6 +54,15 @@ export async function GET(
           .eq("org_id", orgId)
           .eq("campaign_id", campaignId),
         supabase.from("organizations").select("name").eq("id", orgId).single(),
+        supabase
+          .from("control_mappings")
+          .select("control_id,campaign_id,module_id,active")
+          .eq("org_id", orgId)
+          .eq("active", true),
+        supabase
+          .from("integration_sync_events")
+          .select("provider,status,created_at")
+          .eq("org_id", orgId),
       ]);
 
     if (campaignResult.error || !campaignResult.data) {
@@ -65,9 +87,43 @@ export async function GET(
       );
     }
 
+    const optionalSchemaErrors = [mappingsResult.error, syncEventsResult.error];
+    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors(optionalSchemaErrors);
+    if (optionalSchemaErrors.some((item) => Boolean(item)) && !optionalSchemaMissing) {
+      throw new ApiError(
+        "DB_ERROR",
+        mappingsResult.error?.message ??
+          syncEventsResult.error?.message ??
+          "Export query failed",
+        500,
+      );
+    }
+
     const assignments = assignmentResult.data ?? [];
     const attempts = attemptResult.data ?? [];
     const attestations = attestationResult.data ?? [];
+    const mappings = optionalSchemaMissing ? [] : mappingsResult.data ?? [];
+
+    const controlIds = new Set<string>();
+    for (const mapping of mappings) {
+      if (mapping.campaign_id === campaignId || mapping.module_id) {
+        controlIds.add(mapping.control_id);
+      }
+    }
+
+    const latestSyncByProvider = new Map<string, string>();
+    for (const event of (optionalSchemaMissing ? [] : syncEventsResult.data ?? [])) {
+      if (!latestSyncByProvider.has(event.provider)) {
+        latestSyncByProvider.set(event.provider, event.status);
+      }
+    }
+
+    const syncStatusLine =
+      latestSyncByProvider.size > 0
+        ? Array.from(latestSyncByProvider.entries())
+            .map(([provider, status]) => `${provider}:${status}`)
+            .join(" | ")
+        : "none";
 
     const averageScore =
       attempts.length > 0
@@ -88,18 +144,48 @@ export async function GET(
       metrics,
       generatedAtIso: new Date().toISOString(),
       generatedBy: user.id,
+      supplementalLines: [
+        `Control IDs mapped: ${controlIds.size}`,
+        `Latest integration sync status: ${syncStatusLine}`,
+      ],
     });
 
-    const exportInsert = await supabase.from("audit_exports").insert({
-      org_id: orgId,
-      campaign_id: campaignId,
-      file_type: "pdf",
-      checksum: pdf.checksum,
-      generated_by: user.id,
-    });
+    const exportInsert = await supabase
+      .from("audit_exports")
+      .insert({
+        org_id: orgId,
+        campaign_id: campaignId,
+        file_type: "pdf",
+        checksum: pdf.checksum,
+        generated_by: user.id,
+      })
+      .select("id")
+      .single();
 
-    if (exportInsert.error) {
-      throw new ApiError("DB_ERROR", exportInsert.error.message, 500);
+    if (exportInsert.error || !exportInsert.data) {
+      throw new ApiError("DB_ERROR", exportInsert.error?.message ?? "Export insert failed", 500);
+    }
+
+    try {
+      await createEvidenceObjects({
+        supabase,
+        orgId,
+        campaignId,
+        userId: user.id,
+        evidenceType: "campaign_export",
+        sourceTable: "audit_exports",
+        sourceId: exportInsert.data.id,
+        confidenceScore: 0.99,
+        qualityScore: 96,
+        metadata: {
+          exportType: "pdf",
+          checksum: pdf.checksum,
+        },
+      });
+    } catch (error) {
+      if (!isMissingOptionalSchemaError(error)) {
+        throw error;
+      }
     }
 
     await writeRequestAuditLog({

@@ -4,8 +4,13 @@ import { ApiError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/request";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireOrgAccess } from "@/lib/edtech/db";
+import { markCampaignEvidenceStale } from "@/lib/edtech/evidence";
 import { computeQuizSyncHash, quizNeedsRegeneration } from "@/lib/edtech/quiz-sync";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
+import {
+  isMissingOptionalSchemaError,
+  shouldIgnoreOptionalSchemaErrors,
+} from "@/lib/edtech/schema-compat";
 import { moduleMediaEmbedSchema } from "@/lib/edtech/types";
 import { campaignUpdateSchema } from "@/lib/edtech/validation";
 
@@ -85,6 +90,55 @@ export async function GET(
 
     const campaign = campaignResult.data;
 
+    const [mappingsResult, controlsResult, evidenceResult] = await Promise.all([
+      moduleIds.length > 0
+        ? supabase
+            .from("control_mappings")
+            .select("control_id,module_id,campaign_id")
+            .eq("org_id", orgId)
+            .eq("active", true)
+            .or(`campaign_id.eq.${campaignId},module_id.in.(${moduleIds.join(",")})`)
+        : supabase
+            .from("control_mappings")
+            .select("control_id,module_id,campaign_id")
+            .eq("org_id", orgId)
+            .eq("active", true)
+            .eq("campaign_id", campaignId),
+      supabase.from("controls").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+      supabase
+        .from("evidence_objects")
+        .select("evidence_status")
+        .eq("org_id", orgId)
+        .eq("campaign_id", campaignId),
+    ]);
+
+    const readinessErrors = [mappingsResult.error, controlsResult.error, evidenceResult.error];
+    const readinessSchemaMissing = shouldIgnoreOptionalSchemaErrors(readinessErrors);
+
+    if (readinessErrors.some((item) => Boolean(item)) && !readinessSchemaMissing) {
+      throw new ApiError(
+        "DB_ERROR",
+        mappingsResult.error?.message ??
+          controlsResult.error?.message ??
+          evidenceResult.error?.message ??
+          "Failed to load control readiness",
+        500,
+      );
+    }
+
+    const mappedControlIds = new Set(
+      (readinessSchemaMissing ? [] : mappingsResult.data ?? []).map((item) => item.control_id),
+    );
+    const totalControls = readinessSchemaMissing ? 0 : controlsResult.count ?? 0;
+    const statusCounts: Record<"queued" | "synced" | "rejected" | "stale" | "superseded", number> =
+      { queued: 0, synced: 0, rejected: 0, stale: 0, superseded: 0 };
+    for (const item of (readinessSchemaMissing ? [] : evidenceResult.data ?? [])) {
+      const status = item.evidence_status;
+      if (status && status in statusCounts) {
+        statusCounts[status as keyof typeof statusCounts] += 1;
+      }
+    }
+
     return {
       campaign: {
         id: campaign.id,
@@ -99,6 +153,12 @@ export async function GET(
         createdBy: campaign.created_by,
         createdAt: campaign.created_at,
         updatedAt: campaign.updated_at,
+        controlMappingReadiness: {
+          totalControls,
+          mappedControls: mappedControlIds.size,
+          coverageRatio: totalControls > 0 ? mappedControlIds.size / totalControls : 0,
+          evidenceStatusCounts: statusCounts,
+        },
       },
       modules: (modulesResult.data ?? []).map((m) => {
         const mediaEmbeds = parseMediaEmbeds(m.media_embeds_json);
@@ -197,6 +257,8 @@ export async function PUT(
     }
 
     let markedStaleModules = 0;
+    let markedStaleEvidence = 0;
+    let skippedEvidenceStaleUpdate = false;
 
     if (parsed.data.modules) {
       for (const moduleInput of parsed.data.modules) {
@@ -301,6 +363,21 @@ export async function PUT(
       }
     }
 
+    if (markedStaleModules > 0) {
+      try {
+        markedStaleEvidence = await markCampaignEvidenceStale({
+          supabase,
+          orgId,
+          campaignId,
+        });
+      } catch (error) {
+        if (!isMissingOptionalSchemaError(error)) {
+          throw error;
+        }
+        skippedEvidenceStaleUpdate = true;
+      }
+    }
+
     await writeRequestAuditLog({
       supabase,
       requestId,
@@ -313,6 +390,8 @@ export async function PUT(
         campaignId,
         updatedModules: parsed.data.modules?.length ?? 0,
         markedStaleModules,
+        markedStaleEvidence,
+        skippedEvidenceStaleUpdate,
       },
     });
 

@@ -28,6 +28,7 @@ export async function buildSignedPdfSummary(input: {
   metrics: CampaignMetrics;
   generatedAtIso: string;
   generatedBy: string;
+  supplementalLines?: string[];
 }): Promise<{ bytes: Uint8Array; checksum: string }> {
   const checksum = buildAttestationChecksum(input);
 
@@ -54,6 +55,7 @@ export async function buildSignedPdfSummary(input: {
     `Completion rate: ${Math.round(input.metrics.completionRate * 100)}%`,
     `Attestation rate: ${Math.round(input.metrics.attestationRate * 100)}%`,
     `Average score: ${Math.round(input.metrics.averageScore)}%`,
+    ...(input.supplementalLines ?? []),
     `Checksum: ${checksum}`,
   ];
 

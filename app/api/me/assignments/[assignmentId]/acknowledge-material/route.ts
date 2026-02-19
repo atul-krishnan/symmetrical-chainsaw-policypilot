@@ -1,7 +1,9 @@
 import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireUserAndClient } from "@/lib/edtech/db";
+import { createEvidenceObjects } from "@/lib/edtech/evidence";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
+import { isMissingOptionalSchemaError } from "@/lib/edtech/schema-compat";
 
 export async function POST(
   request: Request,
@@ -14,7 +16,7 @@ export async function POST(
 
     const assignmentResult = await supabase
       .from("assignments")
-      .select("id,org_id,campaign_id,state,material_acknowledged_at")
+      .select("id,org_id,campaign_id,module_id,user_id,state,material_acknowledged_at")
       .eq("id", assignmentId)
       .eq("user_id", user.id)
       .single();
@@ -54,6 +56,30 @@ export async function POST(
 
       if (updateResult.error) {
         throw new ApiError("DB_ERROR", updateResult.error.message, 500);
+      }
+    }
+
+    try {
+      await createEvidenceObjects({
+        supabase,
+        orgId: assignment.org_id,
+        campaignId: assignment.campaign_id,
+        moduleId: assignment.module_id,
+        assignmentId: assignment.id,
+        userId: assignment.user_id,
+        evidenceType: "material_acknowledgment",
+        sourceTable: "assignments",
+        sourceId: assignment.id,
+        occurredAtIso: acknowledgedAt,
+        confidenceScore: 0.95,
+        qualityScore: 90,
+        metadata: {
+          flowVersion,
+        },
+      });
+    } catch (error) {
+      if (!isMissingOptionalSchemaError(error)) {
+        throw error;
       }
     }
 

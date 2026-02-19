@@ -3,6 +3,15 @@ import { withApiHandler } from "@/lib/api/route-helpers";
 import { computeCampaignMetrics } from "@/lib/edtech/dashboard";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
+import { shouldIgnoreOptionalSchemaErrors } from "@/lib/edtech/schema-compat";
+
+type EvidenceStatusCounters = {
+  queued: number;
+  synced: number;
+  rejected: number;
+  stale: number;
+  superseded: number;
+};
 
 export async function GET(
   request: Request,
@@ -77,6 +86,122 @@ export async function GET(
       }),
     );
 
+    const [controlsResult, mappingsResult, evidenceResult, connectionsResult] = await Promise.all([
+      supabase
+        .from("controls")
+        .select("id,code,title,risk_level")
+        .eq("org_id", orgId),
+      supabase
+        .from("control_mappings")
+        .select("control_id")
+        .eq("org_id", orgId)
+        .eq("active", true),
+      supabase
+        .from("evidence_objects")
+        .select("control_id,evidence_status")
+        .eq("org_id", orgId),
+      supabase
+        .from("integration_connections")
+        .select("provider,status,last_sync_at,health_message")
+        .eq("org_id", orgId),
+    ]);
+
+    const optionalSchemaErrors = [
+      controlsResult.error,
+      mappingsResult.error,
+      evidenceResult.error,
+      connectionsResult.error,
+    ];
+    const optionalSchemaMissing = shouldIgnoreOptionalSchemaErrors(optionalSchemaErrors);
+
+    if (optionalSchemaErrors.some((item) => Boolean(item)) && !optionalSchemaMissing) {
+      throw new ApiError(
+        "DB_ERROR",
+        controlsResult.error?.message ??
+          mappingsResult.error?.message ??
+          evidenceResult.error?.message ??
+          connectionsResult.error?.message ??
+          "Failed to load control metrics",
+        500,
+      );
+    }
+
+    const controls = optionalSchemaMissing ? [] : controlsResult.data ?? [];
+    const mappings = optionalSchemaMissing ? [] : mappingsResult.data ?? [];
+    const mappedControlIds = new Set(mappings.map((item) => item.control_id));
+    const controlCoverage = {
+      totalControls: controls.length,
+      mappedControls: mappedControlIds.size,
+      coverageRatio: controls.length > 0 ? mappedControlIds.size / controls.length : 0,
+    };
+
+    const evidenceStatusCounts: EvidenceStatusCounters = {
+      queued: 0,
+      synced: 0,
+      rejected: 0,
+      stale: 0,
+      superseded: 0,
+    };
+    const evidenceByControl = new Map<string, EvidenceStatusCounters>();
+
+    for (const evidence of optionalSchemaMissing ? [] : evidenceResult.data ?? []) {
+      const status = evidence.evidence_status;
+      if (status && status in evidenceStatusCounts) {
+        evidenceStatusCounts[status as keyof EvidenceStatusCounters] += 1;
+      }
+
+      if (!evidence.control_id) continue;
+      const current = evidenceByControl.get(evidence.control_id) ?? {
+        queued: 0,
+        synced: 0,
+        rejected: 0,
+        stale: 0,
+        superseded: 0,
+      };
+      if (status && status in current) {
+        current[status as keyof EvidenceStatusCounters] += 1;
+      }
+      evidenceByControl.set(evidence.control_id, current);
+    }
+
+    const riskWeightByLevel = { low: 1, medium: 2, high: 3 } as const;
+    const riskHotspots = controls
+      .map((control) => {
+        const evidence = evidenceByControl.get(control.id) ?? {
+          queued: 0,
+          synced: 0,
+          rejected: 0,
+          stale: 0,
+          superseded: 0,
+        };
+
+        const riskLevel =
+          typeof control.risk_level === "string" && control.risk_level in riskWeightByLevel
+            ? (control.risk_level as keyof typeof riskWeightByLevel)
+            : "medium";
+        const baseRisk = riskWeightByLevel[riskLevel];
+        const riskIndex = baseRisk * (evidence.rejected * 3 + evidence.stale * 2 + evidence.queued);
+
+        return {
+          controlId: control.id,
+          controlCode: control.code,
+          controlTitle: control.title,
+          riskLevel,
+          riskIndex,
+          evidence,
+        };
+      })
+      .filter((item) => item.riskIndex > 0)
+      .sort((a, b) => b.riskIndex - a.riskIndex)
+      .slice(0, 10);
+
+    const integrationHealth = (optionalSchemaMissing ? [] : connectionsResult.data ?? []).map((item) => ({
+      provider: item.provider,
+      status: item.status,
+      lastSyncAt: item.last_sync_at,
+      healthMessage: item.health_message,
+    }));
+
     // At-risk learners: overdue or still pending
     const atRiskResult = await supabase
       .from("assignments")
@@ -127,6 +252,10 @@ export async function GET(
       orgId,
       campaigns: campaignMetrics,
       atRiskLearners,
+      controlCoverage,
+      evidenceStatusCounts,
+      integrationHealth,
+      riskHotspots,
     };
   });
 }

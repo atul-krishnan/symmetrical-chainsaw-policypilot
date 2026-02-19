@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   attestationSchema,
   campaignGenerateSchema,
+  controlFrameworkImportSchema,
+  controlMappingUpdateSchema,
+  integrationConnectSchema,
+  integrationSyncSchema,
   policyUploadSchema,
   quizAttemptSchema,
 } from "@/lib/edtech/validation";
@@ -43,5 +47,42 @@ describe("validation schemas", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("accepts control framework import payload", () => {
+    const result = controlFrameworkImportSchema.safeParse({
+      templates: ["soc2", "iso27001"],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects control mapping payload without target references", () => {
+    const result = controlMappingUpdateSchema.safeParse({
+      mappings: [
+        {
+          mappingStrength: "primary",
+          active: true,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts integration connect payload with optional scope list", () => {
+    const result = integrationConnectSchema.safeParse({
+      apiKey: "secret-api-key-12345",
+      scopes: ["evidence.write", "controls.read"],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("applies integration sync defaults", () => {
+    const result = integrationSyncSchema.parse({});
+
+    expect(result.evidenceStatus).toBe("queued");
+    expect(result.limit).toBe(200);
   });
 });

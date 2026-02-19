@@ -5,9 +5,11 @@ import { parseJsonBody } from "@/lib/api/request";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { ANALYTICS_EVENTS } from "@/lib/analytics/events";
 import { requireUserAndClient } from "@/lib/edtech/db";
+import { createEvidenceObjects } from "@/lib/edtech/evidence";
 import { gradeQuiz } from "@/lib/edtech/quiz-grader";
 import { enforceRateLimit } from "@/lib/edtech/rate-limit";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
+import { isMissingOptionalSchemaError } from "@/lib/edtech/schema-compat";
 import { quizAttemptSchema } from "@/lib/edtech/validation";
 import { logInfo } from "@/lib/observability/logger";
 
@@ -105,8 +107,9 @@ export async function POST(
 
     const grading = gradeQuiz(questions, parsed.data.answers, moduleResult.data.pass_score);
 
+    const attemptId = randomUUID();
     const attemptInsert = await supabase.from("module_attempts").insert({
-      id: randomUUID(),
+      id: attemptId,
       org_id: moduleResult.data.org_id,
       module_id: moduleId,
       campaign_id: moduleResult.data.campaign_id,
@@ -137,6 +140,50 @@ export async function POST(
 
     if (assignmentUpdate.error) {
       throw new ApiError("DB_ERROR", assignmentUpdate.error.message, 500);
+    }
+
+    try {
+      await createEvidenceObjects({
+        supabase,
+        orgId: moduleResult.data.org_id,
+        campaignId: moduleResult.data.campaign_id,
+        moduleId,
+        assignmentId: assignmentResult.data.id,
+        userId: user.id,
+        evidenceType: "quiz_attempt",
+        sourceTable: "module_attempts",
+        sourceId: attemptId,
+        confidenceScore: 0.92,
+        qualityScore: grading.passed ? 92 : 78,
+        metadata: {
+          scorePct: grading.scorePct,
+          passed: grading.passed,
+        },
+      });
+
+      if (grading.passed) {
+        await createEvidenceObjects({
+          supabase,
+          orgId: moduleResult.data.org_id,
+          campaignId: moduleResult.data.campaign_id,
+          moduleId,
+          assignmentId: assignmentResult.data.id,
+          userId: user.id,
+          evidenceType: "quiz_pass",
+          sourceTable: "module_attempts",
+          sourceId: attemptId,
+          confidenceScore: 0.95,
+          qualityScore: 95,
+          metadata: {
+            scorePct: grading.scorePct,
+            passed: true,
+          },
+        });
+      }
+    } catch (error) {
+      if (!isMissingOptionalSchemaError(error)) {
+        throw error;
+      }
     }
 
     logInfo("quiz_attempt_recorded", {

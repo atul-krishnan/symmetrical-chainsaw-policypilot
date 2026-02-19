@@ -8,6 +8,7 @@ import {
     ChevronDown,
     FileText,
     LayoutDashboard,
+    Link2,
     LogOut,
     Megaphone,
     Shield,
@@ -36,6 +37,8 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
     { href: "/product/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, minRole: "manager", section: "main" },
     { href: "/product/admin/policies", label: "Policies", icon: FileText, minRole: "manager", section: "main" },
+    { href: "/product/admin/controls", label: "Controls & Evidence", icon: Shield, minRole: "manager", section: "main" },
+    { href: "/product/admin/integrations", label: "Integrations", icon: Link2, minRole: "manager", section: "main" },
     { href: "/product/admin/campaigns", label: "Campaigns", icon: Megaphone, minRole: "admin", section: "main" },
     { href: "/product/learn", label: "My Learning", icon: BookOpen, minRole: "learner", section: "learning" },
 ];
