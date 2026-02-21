@@ -729,6 +729,20 @@ export default function CampaignEditorPage() {
                     )}
                   </div>
                 )}
+
+                <div className="rounded-xl border border-dashed border-[#bcd0ef] bg-[#f8fbff] px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-[#10244a]">
+                      Animated Policy Videos
+                    </p>
+                    <span className="rounded-full bg-[#eaf0ff] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#2b57a0]">
+                      Coming Soon
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-[#4f6486]">
+                    Soon you can generate short, role-specific animated explainers from finalized module content before publish.
+                  </p>
+                </div>
               </div>
 
               {/* Action buttons */}
