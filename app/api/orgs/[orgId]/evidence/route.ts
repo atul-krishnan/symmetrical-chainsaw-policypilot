@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
 import { requireOrgAccess } from "@/lib/edtech/db";
+import { fetchLineageForEvidenceIds } from "@/lib/edtech/evidence-lineage";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
 import { evidenceQuerySchema } from "@/lib/edtech/validation";
 
@@ -31,7 +32,7 @@ export async function GET(
     let query = supabase
       .from("evidence_objects")
       .select(
-        "id,control_id,campaign_id,module_id,assignment_id,user_id,evidence_type,evidence_status,confidence_score,quality_score,checksum,source_table,source_id,metadata_json,occurred_at,created_at,controls(id,code,title)",
+        "id,control_id,campaign_id,module_id,assignment_id,user_id,evidence_type,evidence_status,confidence_score,quality_score,checksum,lineage_hash,superseded_by_evidence_id,source_table,source_id,metadata_json,occurred_at,created_at,controls(id,code,title)",
       )
       .eq("org_id", orgId)
       .order("occurred_at", { ascending: false })
@@ -55,6 +56,12 @@ export async function GET(
 
     const evidenceRows = evidenceResult.data ?? [];
     const evidenceIds = evidenceRows.map((row) => row.id);
+
+    const lineage = await fetchLineageForEvidenceIds({
+      supabase,
+      orgId,
+      evidenceIds,
+    });
 
     const latestEventsByEvidenceId = new Map<
       string,
@@ -134,6 +141,8 @@ export async function GET(
           confidenceScore: Number(row.confidence_score),
           qualityScore: Number(row.quality_score),
           checksum: row.checksum,
+          lineageHash: row.lineage_hash,
+          supersededByEvidenceId: row.superseded_by_evidence_id,
           sourceTable: row.source_table,
           sourceId: row.source_id,
           occurredAt: row.occurred_at,
@@ -146,6 +155,20 @@ export async function GET(
               }
             : null,
           latestSyncEvent: latestEventsByEvidenceId.get(row.id) ?? null,
+          lineage: {
+            derivedFromEvidenceIds: (lineage.bySource.get(row.id) ?? [])
+              .filter((edge) => edge.relationType === "derived_from")
+              .map((edge) => edge.targetEvidenceId),
+            derivedByEvidenceIds: (lineage.byTarget.get(row.id) ?? [])
+              .filter((edge) => edge.relationType === "derived_from")
+              .map((edge) => edge.sourceEvidenceId),
+            supersedesEvidenceIds: (lineage.bySource.get(row.id) ?? [])
+              .filter((edge) => edge.relationType === "supersedes")
+              .map((edge) => edge.targetEvidenceId),
+            exportedInEvidenceIds: (lineage.bySource.get(row.id) ?? [])
+              .filter((edge) => edge.relationType === "exported_in")
+              .map((edge) => edge.targetEvidenceId),
+          },
         };
       }),
     };

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ApiError } from "@/lib/api/errors";
+import { createEvidenceLineageLinks } from "@/lib/edtech/evidence-lineage";
 import type { EvidenceStatus } from "@/lib/types";
 
 type EvidenceType =
@@ -90,7 +91,10 @@ export async function createEvidenceObjects(input: {
   confidenceScore?: number;
   qualityScore?: number;
   status?: EvidenceStatus;
-}): Promise<{ created: number; controlsMapped: number }> {
+  createdBy?: string | null;
+  derivedFromEvidenceIds?: string[];
+  forceNewVersion?: boolean;
+}): Promise<{ created: number; controlsMapped: number; insertedEvidenceIds: string[] }> {
   const occurredAt = input.occurredAtIso ?? new Date().toISOString();
   const metadata = input.metadata ?? {};
   const status = input.status ?? "queued";
@@ -108,7 +112,7 @@ export async function createEvidenceObjects(input: {
 
   const existingResult = await input.supabase
     .from("evidence_objects")
-    .select("id,control_id")
+    .select("id,control_id,evidence_status")
     .eq("org_id", input.orgId)
     .eq("evidence_type", input.evidenceType)
     .eq("source_table", input.sourceTable)
@@ -122,8 +126,9 @@ export async function createEvidenceObjects(input: {
     (existingResult.data ?? []).map((row) => row.control_id ?? "__NULL__"),
   );
 
+  const shouldDeduplicate = input.forceNewVersion !== true;
   const rowsToInsert = targets
-    .filter((controlId) => !existingControlIds.has(controlId ?? "__NULL__"))
+    .filter((controlId) => !shouldDeduplicate || !existingControlIds.has(controlId ?? "__NULL__"))
     .map((controlId) => ({
       org_id: input.orgId,
       control_id: controlId,
@@ -146,6 +151,15 @@ export async function createEvidenceObjects(input: {
       }),
       source_table: input.sourceTable,
       source_id: input.sourceId,
+      lineage_hash: buildEvidenceChecksum({
+        orgId: input.orgId,
+        evidenceType: input.evidenceType,
+        sourceTable: "lineage",
+        sourceId: `${input.sourceTable}:${input.sourceId}`,
+        controlId,
+        occurredAt,
+        metadata,
+      }),
       metadata_json: metadata,
       occurred_at: occurredAt,
       updated_at: new Date().toISOString(),
@@ -155,18 +169,74 @@ export async function createEvidenceObjects(input: {
     return {
       created: 0,
       controlsMapped: controlIds.length,
+      insertedEvidenceIds: [],
     };
   }
 
-  const insertResult = await input.supabase.from("evidence_objects").insert(rowsToInsert);
+  const insertResult = await input.supabase
+    .from("evidence_objects")
+    .insert(rowsToInsert)
+    .select("id,control_id");
 
   if (insertResult.error) {
     throw new ApiError("DB_ERROR", insertResult.error.message, 500);
   }
 
+  const insertedEvidenceIds = (insertResult.data ?? []).map((row) => row.id);
+
+  if ((input.derivedFromEvidenceIds ?? []).length > 0 && insertedEvidenceIds.length > 0) {
+    for (const insertedId of insertedEvidenceIds) {
+      await createEvidenceLineageLinks({
+        supabase: input.supabase,
+        orgId: input.orgId,
+        sourceEvidenceId: insertedId,
+        targetEvidenceIds: input.derivedFromEvidenceIds ?? [],
+        relationType: "derived_from",
+        createdBy: input.createdBy ?? null,
+      });
+    }
+  }
+
+  if (input.forceNewVersion === true) {
+    for (const insertedRow of insertResult.data ?? []) {
+      const priorRows = (existingResult.data ?? []).filter(
+        (row) =>
+          (row.control_id ?? "__NULL__") === (insertedRow.control_id ?? "__NULL__") &&
+          row.evidence_status !== "superseded",
+      );
+
+      if (priorRows.length === 0) continue;
+
+      const priorIds = priorRows.map((row) => row.id);
+      const supersedeUpdate = await input.supabase
+        .from("evidence_objects")
+        .update({
+          evidence_status: "superseded",
+          superseded_by_evidence_id: insertedRow.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("org_id", input.orgId)
+        .in("id", priorIds);
+
+      if (supersedeUpdate.error) {
+        throw new ApiError("DB_ERROR", supersedeUpdate.error.message, 500);
+      }
+
+      await createEvidenceLineageLinks({
+        supabase: input.supabase,
+        orgId: input.orgId,
+        sourceEvidenceId: insertedRow.id,
+        targetEvidenceIds: priorIds,
+        relationType: "supersedes",
+        createdBy: input.createdBy ?? null,
+      });
+    }
+  }
+
   return {
     created: rowsToInsert.length,
     controlsMapped: controlIds.length,
+    insertedEvidenceIds,
   };
 }
 

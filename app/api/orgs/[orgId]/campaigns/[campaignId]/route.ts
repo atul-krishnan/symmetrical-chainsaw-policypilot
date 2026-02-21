@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/request";
 import { withApiHandler } from "@/lib/api/route-helpers";
+import { buildControlImpactForecast } from "@/lib/edtech/adoption-intelligence";
+import { loadControlFreshness } from "@/lib/edtech/adoption-store";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { markCampaignEvidenceStale } from "@/lib/edtech/evidence";
 import { computeQuizSyncHash, quizNeedsRegeneration } from "@/lib/edtech/quiz-sync";
@@ -130,6 +132,20 @@ export async function GET(
       }
     }
 
+    const mappedControlIdsList = Array.from(mappedControlIds);
+    const freshnessLoaded =
+      mappedControlIdsList.length > 0
+        ? await loadControlFreshness({
+            supabase,
+            orgId,
+            controlIds: mappedControlIdsList,
+          })
+        : null;
+    const controlImpactForecast = buildControlImpactForecast({
+      mappedControlIds: mappedControlIdsList,
+      freshnessByControlId: freshnessLoaded?.computedByControlId ?? new Map(),
+    });
+
     return {
       campaign: {
         id: campaign.id,
@@ -150,6 +166,7 @@ export async function GET(
           coverageRatio: totalControls > 0 ? mappedControlIds.size / totalControls : 0,
           evidenceStatusCounts: statusCounts,
         },
+        controlImpactForecast,
       },
       modules: (modulesResult.data ?? []).map((m) => {
         const mediaEmbeds = parseMediaEmbeds(m.media_embeds_json);

@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adoptionGraphQuerySchema,
+  adoptionFreshnessQuerySchema,
+  auditNarrativeGenerateSchema,
   attestationSchema,
+  benchmarkQuerySchema,
   campaignGenerateSchema,
   controlFrameworkImportSchema,
   controlMappingUpdateSchema,
+  interventionApproveSchema,
+  interventionExecuteSchema,
+  interventionListQuerySchema,
+  interventionRecommendSchema,
   integrationConnectSchema,
   integrationSyncSchema,
   policyUploadSchema,
@@ -84,5 +92,54 @@ describe("validation schemas", () => {
 
     expect(result.evidenceStatus).toBe("queued");
     expect(result.limit).toBe(200);
+  });
+
+  it("accepts adoption graph query with roleTrack filter", () => {
+    const result = adoptionGraphQuerySchema.safeParse({
+      roleTrack: "builder",
+      window: 30,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("applies defaults for intervention recommendation payload", () => {
+    const result = interventionRecommendSchema.parse({});
+
+    expect(result.maxRecommendations).toBe(25);
+  });
+
+  it("validates intervention list and execute payloads", () => {
+    const list = interventionListQuerySchema.safeParse({
+      status: "approved",
+    });
+    const execute = interventionExecuteSchema.safeParse({
+      idempotencyKey: "manual-key-123456",
+    });
+    const approve = interventionApproveSchema.safeParse({
+      note: "Reviewed by security lead.",
+    });
+
+    expect(list.success).toBe(true);
+    expect(execute.success).toBe(true);
+    expect(approve.success).toBe(true);
+  });
+
+  it("validates benchmark and audit narrative query payloads", () => {
+    const benchmark = benchmarkQuerySchema.safeParse({
+      metric: "control_freshness",
+      cohort: "mid_market_saas",
+      window: 60,
+    });
+    const freshness = adoptionFreshnessQuerySchema.safeParse({
+      window: 30,
+    });
+    const narrative = auditNarrativeGenerateSchema.safeParse({
+      window: 30,
+    });
+
+    expect(benchmark.success).toBe(true);
+    expect(freshness.success).toBe(true);
+    expect(narrative.success).toBe(true);
   });
 });

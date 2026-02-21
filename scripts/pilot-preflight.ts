@@ -38,6 +38,20 @@ const REQUIRED_TABLES = [
   "audit_exports",
   "notification_jobs",
   "request_audit_logs",
+  "control_frameworks",
+  "controls",
+  "control_mappings",
+  "evidence_objects",
+  "integration_connections",
+  "integration_sync_jobs",
+  "integration_sync_events",
+  "control_freshness_snapshots",
+  "adoption_edges",
+  "intervention_recommendations",
+  "intervention_executions",
+  "evidence_lineage_links",
+  "benchmark_cohorts",
+  "benchmark_metric_snapshots",
 ];
 
 function readEnv(name: string): string {

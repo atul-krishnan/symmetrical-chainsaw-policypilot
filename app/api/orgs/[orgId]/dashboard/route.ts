@@ -1,5 +1,11 @@
 import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
+import { summarizeFreshness } from "@/lib/edtech/adoption-intelligence";
+import {
+  isAdoptionIntelligenceSchemaMissingError,
+  loadControlFreshness,
+  resolveBenchmarkDelta,
+} from "@/lib/edtech/adoption-store";
 import { computeCampaignMetrics } from "@/lib/edtech/dashboard";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
@@ -198,6 +204,55 @@ export async function GET(
       healthMessage: item.health_message,
     }));
 
+    const [freshnessLoaded, interventionsResult, freshnessBenchmark, ackBenchmark] = await Promise.all([
+      loadControlFreshness({
+        supabase,
+        orgId,
+      }),
+      supabase
+        .from("intervention_recommendations")
+        .select("status")
+        .eq("org_id", orgId)
+        .limit(1000),
+      resolveBenchmarkDelta({
+        supabase,
+        orgId,
+        metricName: "control_freshness",
+      }),
+      resolveBenchmarkDelta({
+        supabase,
+        orgId,
+        metricName: "time_to_ack_hours",
+      }),
+    ]);
+
+    const compatMode =
+      freshnessLoaded.compatMode ||
+      freshnessBenchmark.compatMode ||
+      ackBenchmark.compatMode ||
+      isAdoptionIntelligenceSchemaMissingError(interventionsResult.error);
+
+    if (interventionsResult.error && !isAdoptionIntelligenceSchemaMissingError(interventionsResult.error)) {
+      throw new ApiError("DB_ERROR", interventionsResult.error.message, 500);
+    }
+
+    const freshnessSummary = summarizeFreshness(
+      Array.from(freshnessLoaded.computedByControlId.values()),
+    );
+
+    const interventionQueue = {
+      proposed: 0,
+      approved: 0,
+      executing: 0,
+      completed: 0,
+      dismissed: 0,
+    };
+    for (const intervention of compatMode ? [] : (interventionsResult.data ?? [])) {
+      if (intervention.status in interventionQueue) {
+        interventionQueue[intervention.status as keyof typeof interventionQueue] += 1;
+      }
+    }
+
     // At-risk learners: overdue or still pending
     const atRiskResult = await supabase
       .from("assignments")
@@ -241,6 +296,7 @@ export async function GET(
       userId: user.id,
       metadata: {
         campaigns: campaignMetrics.length,
+        compatMode,
       },
     });
 
@@ -252,6 +308,23 @@ export async function GET(
       evidenceStatusCounts,
       integrationHealth,
       riskHotspots,
+      freshnessKpi: {
+        freshControls: freshnessSummary.freshControls,
+        totalControls: freshnessSummary.totalControls,
+        freshCoverageRatio: freshnessSummary.freshCoverageRatio,
+        staleControls: freshnessSummary.staleControls,
+        criticalControls: freshnessSummary.criticalControls,
+      },
+      interventionQueue,
+      benchmarkDeltas: {
+        controlFreshness: freshnessBenchmark,
+        timeToAcknowledgeHours: ackBenchmark,
+      },
+      northStar: {
+        name: "percent_fresh_controls",
+        value: freshnessSummary.freshCoverageRatio,
+      },
+      compatMode,
     };
   });
 }

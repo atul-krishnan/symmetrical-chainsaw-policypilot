@@ -45,6 +45,15 @@ All API errors use this envelope:
 - `POST /api/orgs/[orgId]/campaigns/[campaignId]/nudges/send`
   - Deduplicates reminder sends in a 24-hour window per assignment.
 - `GET /api/orgs/[orgId]/dashboard`
+- `GET /api/orgs/[orgId]/adoption/freshness?window=`
+- `GET /api/orgs/[orgId]/adoption/graph?controlId=&roleTrack=&window=`
+- `GET /api/orgs/[orgId]/interventions?status=&controlId=`
+- `POST /api/orgs/[orgId]/interventions/recommend`
+- `POST /api/orgs/[orgId]/interventions/[interventionId]/approve`
+- `POST /api/orgs/[orgId]/interventions/[interventionId]/execute`
+- `GET /api/orgs/[orgId]/benchmarks?metric=&cohort=&window=`
+- `GET /api/orgs/[orgId]/controls/[controlId]/lineage`
+- `POST /api/orgs/[orgId]/audit-narratives/generate`
 - `GET /api/orgs/[orgId]/exports/[campaignId].csv`
 - `GET /api/orgs/[orgId]/exports/[campaignId].pdf`
 

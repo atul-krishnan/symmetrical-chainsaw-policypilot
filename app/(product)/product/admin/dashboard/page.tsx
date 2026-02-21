@@ -63,6 +63,38 @@ type MetricsResponse = {
       superseded: number;
     };
   }>;
+  freshnessKpi: {
+    freshControls: number;
+    totalControls: number;
+    freshCoverageRatio: number;
+    staleControls: number;
+    criticalControls: number;
+  };
+  interventionQueue: {
+    proposed: number;
+    approved: number;
+    executing: number;
+    completed: number;
+    dismissed: number;
+  };
+  benchmarkDeltas: {
+    controlFreshness: {
+      cohortCode: string;
+      delta: number | null;
+      percentileRank: number | null;
+      band: string;
+    };
+    timeToAcknowledgeHours: {
+      cohortCode: string;
+      delta: number | null;
+      percentileRank: number | null;
+      band: string;
+    };
+  };
+  northStar: {
+    name: string;
+    value: number;
+  };
 };
 
 async function getAccessToken(): Promise<string | null> {
@@ -145,6 +177,14 @@ export default function DashboardPage() {
           : undefined,
         icon: TrendingUp,
       },
+      {
+        label: "Fresh Controls",
+        value: metrics ? formatPercent(metrics.freshnessKpi.freshCoverageRatio) : "0%",
+        sub: metrics
+          ? `${metrics.freshnessKpi.freshControls}/${metrics.freshnessKpi.totalControls} fresh`
+          : undefined,
+        icon: TrendingUp,
+      },
     ]
     : [];
 
@@ -173,7 +213,7 @@ export default function DashboardPage() {
       {/* Loading skeleton */}
       {loading && !summary && (
         <div className="kpi-grid">
-          {[1, 2, 3, 4, 5].map((n) => (
+          {[1, 2, 3, 4, 5, 6].map((n) => (
             <div key={n} className="stat-card animate-pulse">
               <div className="h-3 w-20 rounded bg-[var(--bg-muted)]" />
               <div className="mt-3 h-8 w-16 rounded bg-[var(--bg-muted)]" />
@@ -349,6 +389,53 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {metrics && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="card p-5">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">North Star</h2>
+            <p className="mt-2 text-3xl font-bold text-[var(--text-primary)]">
+              {formatPercent(metrics.northStar.value)}
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              % of in-scope controls with fresh workforce evidence
+            </p>
+          </div>
+
+          <div className="card p-5">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">Intervention Queue</h2>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <p>Proposed: <strong>{metrics.interventionQueue.proposed}</strong></p>
+              <p>Approved: <strong>{metrics.interventionQueue.approved}</strong></p>
+              <p>Executing: <strong>{metrics.interventionQueue.executing}</strong></p>
+              <p>Completed: <strong>{metrics.interventionQueue.completed}</strong></p>
+            </div>
+          </div>
+
+          <div className="card p-5">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">Benchmark Delta</h2>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Freshness:{" "}
+              <strong className="text-[var(--text-primary)]">
+                {metrics.benchmarkDeltas.controlFreshness.delta === null
+                  ? "—"
+                  : `${(metrics.benchmarkDeltas.controlFreshness.delta * 100).toFixed(1)}pp`}
+              </strong>
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Ack time:{" "}
+              <strong className="text-[var(--text-primary)]">
+                {metrics.benchmarkDeltas.timeToAcknowledgeHours.delta === null
+                  ? "—"
+                  : `${metrics.benchmarkDeltas.timeToAcknowledgeHours.delta.toFixed(2)}h`}
+              </strong>
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Cohort: {metrics.benchmarkDeltas.controlFreshness.cohortCode}
+            </p>
           </div>
         </div>
       )}

@@ -4,6 +4,8 @@ export type RoleTrack = "exec" | "builder" | "general";
 export type LearningFlowVersion = 1 | 2;
 export type ControlRiskLevel = "low" | "medium" | "high";
 export type EvidenceStatus = "queued" | "synced" | "rejected" | "stale" | "superseded";
+export type FreshnessState = "fresh" | "aging" | "stale" | "critical";
+export type InterventionStatus = "proposed" | "approved" | "executing" | "completed" | "dismissed";
 
 export type PolicyDocument = {
   id: string;
@@ -208,10 +210,117 @@ export type EvidenceObject = {
   checksum: string;
   sourceTable: string;
   sourceId: string;
+  lineageHash: string;
+  supersededByEvidenceId: string | null;
   metadataJson: Record<string, unknown>;
   occurredAt: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AdoptionEdge = {
+  id: string;
+  orgId: string;
+  edgeType:
+    | "obligation_control"
+    | "control_campaign"
+    | "control_module"
+    | "control_outcome"
+    | "control_freshness";
+  policyId: string | null;
+  obligationId: string | null;
+  controlId: string | null;
+  campaignId: string | null;
+  moduleId: string | null;
+  evidenceObjectId: string | null;
+  freshnessSnapshotId: string | null;
+  roleTrack: RoleTrack | null;
+  weight: number;
+  metadataJson: Record<string, unknown>;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export type ControlFreshnessSnapshot = {
+  id: string;
+  orgId: string;
+  controlId: string;
+  freshnessState: FreshnessState;
+  freshnessScore: number;
+  freshEvidenceCount: number;
+  staleEvidenceCount: number;
+  rejectedEvidenceCount: number;
+  syncedEvidenceCount: number;
+  medianAckHours: number | null;
+  lastPolicyUpdateAt: string | null;
+  latestEvidenceAt: string | null;
+  metadataJson: Record<string, unknown>;
+  computedAt: string;
+};
+
+export type InterventionRecommendation = {
+  id: string;
+  orgId: string;
+  controlId: string;
+  campaignId: string | null;
+  moduleId: string | null;
+  recommendationType:
+    | "reminder_cadence"
+    | "role_refresher_module"
+    | "manager_escalation"
+    | "attestation_refresh";
+  status: InterventionStatus;
+  rationale: string;
+  expectedImpactPct: number;
+  confidenceScore: number;
+  metadataJson: Record<string, unknown>;
+  proposedBy: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  dismissedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InterventionExecution = {
+  id: string;
+  orgId: string;
+  interventionId: string;
+  executionStatus: "queued" | "running" | "completed" | "failed";
+  idempotencyKey: string;
+  resultJson: Record<string, unknown>;
+  errorMessage: string | null;
+  executedBy: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+};
+
+export type EvidenceLineageLink = {
+  id: number;
+  orgId: string;
+  sourceEvidenceId: string;
+  targetEvidenceId: string;
+  relationType: "derived_from" | "supersedes" | "exported_in";
+  metadataJson: Record<string, unknown>;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export type BenchmarkMetricSnapshot = {
+  id: string;
+  orgId: string | null;
+  cohortId: string;
+  metricName: "control_freshness" | "time_to_ack_hours" | "stale_controls_ratio";
+  metricValue: number;
+  percentileRank: number | null;
+  bandLabel: string | null;
+  sampleSize: number;
+  windowDays: number;
+  anonymized: boolean;
+  metadataJson: Record<string, unknown>;
+  snapshotAt: string;
+  createdAt: string;
 };
 
 export type ConnectorConfig = {

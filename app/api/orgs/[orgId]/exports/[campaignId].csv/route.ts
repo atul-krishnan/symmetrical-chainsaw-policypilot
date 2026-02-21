@@ -4,6 +4,7 @@ import { buildCampaignCsv } from "@/lib/edtech/audit-export";
 import { buildAttestationChecksum } from "@/lib/edtech/attestation";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { createEvidenceObjects } from "@/lib/edtech/evidence";
+import { createEvidenceLineageLinks } from "@/lib/edtech/evidence-lineage";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
 import { logError, logInfo } from "@/lib/observability/logger";
 import { createRequestContext } from "@/lib/observability/request-context";
@@ -164,7 +165,7 @@ export async function GET(
       throw new ApiError("DB_ERROR", exportInsert.error?.message ?? "Export insert failed", 500);
     }
 
-    await createEvidenceObjects({
+    const exportEvidence = await createEvidenceObjects({
       supabase,
       orgId,
       campaignId,
@@ -174,12 +175,36 @@ export async function GET(
       sourceId: exportInsert.data.id,
       confidenceScore: 0.99,
       qualityScore: 96,
+      createdBy: user.id,
       metadata: {
         exportType: "csv",
         checksum,
         rowsCount: rows.length,
       },
     });
+
+    const campaignEvidenceResult = await supabase
+      .from("evidence_objects")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("campaign_id", campaignId)
+      .neq("source_table", "audit_exports");
+
+    if (campaignEvidenceResult.error) {
+      throw new ApiError("DB_ERROR", campaignEvidenceResult.error.message, 500);
+    }
+
+    const sourceEvidenceIds = (campaignEvidenceResult.data ?? []).map((item) => item.id);
+    for (const sourceEvidenceId of sourceEvidenceIds) {
+      await createEvidenceLineageLinks({
+        supabase,
+        orgId,
+        sourceEvidenceId,
+        targetEvidenceIds: exportEvidence.insertedEvidenceIds,
+        relationType: "exported_in",
+        createdBy: user.id,
+      });
+    }
 
     await writeRequestAuditLog({
       supabase,

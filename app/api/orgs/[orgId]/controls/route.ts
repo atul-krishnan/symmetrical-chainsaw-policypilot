@@ -1,5 +1,10 @@
 import { ApiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/route-helpers";
+import {
+  isAdoptionIntelligenceSchemaMissingError,
+  loadControlFreshness,
+  resolveBenchmarkDelta,
+} from "@/lib/edtech/adoption-store";
 import { requireOrgAccess } from "@/lib/edtech/db";
 import { writeRequestAuditLog } from "@/lib/edtech/request-audit-log";
 
@@ -79,6 +84,45 @@ export async function GET(
     const evidence = evidenceResult.data ?? [];
     const campaigns = campaignsResult.data ?? [];
 
+    const [freshnessLoaded, interventionsResult, benchmarkDelta] = await Promise.all([
+      loadControlFreshness({
+        supabase,
+        orgId,
+      }),
+      supabase
+        .from("intervention_recommendations")
+        .select("control_id,status,created_at")
+        .eq("org_id", orgId)
+        .in("status", ["proposed", "approved", "executing"])
+        .order("created_at", { ascending: false }),
+      resolveBenchmarkDelta({
+        supabase,
+        orgId,
+        metricName: "control_freshness",
+      }),
+    ]);
+
+    const compatMode =
+      freshnessLoaded.compatMode ||
+      benchmarkDelta.compatMode ||
+      isAdoptionIntelligenceSchemaMissingError(interventionsResult.error);
+
+    if (interventionsResult.error && !isAdoptionIntelligenceSchemaMissingError(interventionsResult.error)) {
+      throw new ApiError("DB_ERROR", interventionsResult.error.message, 500);
+    }
+
+    const interventionCountByControl = new Map<string, number>();
+    const latestInterventionStatusByControl = new Map<string, string>();
+    for (const item of compatMode ? [] : (interventionsResult.data ?? [])) {
+      interventionCountByControl.set(
+        item.control_id,
+        (interventionCountByControl.get(item.control_id) ?? 0) + 1,
+      );
+      if (!latestInterventionStatusByControl.has(item.control_id)) {
+        latestInterventionStatusByControl.set(item.control_id, item.status);
+      }
+    }
+
     const frameworkById = new Map(frameworks.map((framework) => [framework.id, framework]));
 
     const mappingCounts = new Map<string, number>();
@@ -150,6 +194,40 @@ export async function GET(
         activeCampaignId: activeCampaignByControl.get(control.id) ?? null,
         activeMappingStrength: activeStrengthByControl.get(control.id) ?? null,
         evidence: evidenceStats,
+        freshness: (() => {
+          const snapshot = freshnessLoaded.computedByControlId.get(control.id);
+          if (!snapshot) {
+            return {
+              state: "critical",
+              score: 0,
+              latestEvidenceAt: null,
+            };
+          }
+          return {
+            state: snapshot.state,
+            score: snapshot.score,
+            latestEvidenceAt: snapshot.latestEvidenceAt,
+          };
+        })(),
+        freshnessTrend: freshnessLoaded.trendByControlId.get(control.id) ?? [],
+        benchmark: (() => {
+          const snapshot = freshnessLoaded.computedByControlId.get(control.id);
+          const basePercentile = benchmarkDelta.percentileRank;
+          const score = snapshot?.score ?? 0;
+          const percentileRank =
+            basePercentile === null
+              ? Number(score.toFixed(1))
+              : Math.max(1, Math.min(99, Number((basePercentile + (score - 70) * 0.4).toFixed(1))));
+          return {
+            cohortCode: benchmarkDelta.cohortCode,
+            percentileRank,
+            band: benchmarkDelta.band,
+          };
+        })(),
+        intervention: {
+          activeCount: interventionCountByControl.get(control.id) ?? 0,
+          latestStatus: latestInterventionStatusByControl.get(control.id) ?? null,
+        },
       };
     });
 
@@ -166,6 +244,7 @@ export async function GET(
       metadata: {
         controlCount: controls.length,
         mappedControlCount: mappedControlIds.size,
+        compatMode,
       },
     });
 
@@ -174,10 +253,12 @@ export async function GET(
       frameworks,
       campaigns,
       controls: items,
+      compatMode,
       summary: {
         totalControls: controls.length,
         mappedControls: mappedControlIds.size,
         coverageRatio,
+        benchmarkCohort: benchmarkDelta.cohortCode,
       },
     };
   });

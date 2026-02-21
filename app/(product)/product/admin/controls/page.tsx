@@ -48,11 +48,27 @@ type ControlsResponse = {
       stale: number;
       superseded: number;
     };
+    freshness: {
+      state: "fresh" | "aging" | "stale" | "critical";
+      score: number;
+      latestEvidenceAt: string | null;
+    };
+    freshnessTrend: number[];
+    benchmark: {
+      cohortCode: string;
+      percentileRank: number | null;
+      band: string;
+    };
+    intervention: {
+      activeCount: number;
+      latestStatus: string | null;
+    };
   }>;
   summary: {
     totalControls: number;
     mappedControls: number;
     coverageRatio: number;
+    benchmarkCohort: string;
   };
 };
 
@@ -88,6 +104,12 @@ type EvidenceResponse = {
       externalEvidenceId: string | null;
       createdAt: string;
     } | null;
+    lineage?: {
+      derivedFromEvidenceIds: string[];
+      derivedByEvidenceIds: string[];
+      supersedesEvidenceIds: string[];
+      exportedInEvidenceIds: string[];
+    };
   }>;
 };
 
@@ -170,6 +192,8 @@ export default function ControlsPage() {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [savingControlId, setSavingControlId] = useState<string | null>(null);
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
+  const [narrative, setNarrative] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -405,6 +429,50 @@ export default function ControlsPage() {
     setSavingControlId(null);
   };
 
+  const generateNarrative = async () => {
+    if (!selectedOrgId) {
+      setError("Select an organization workspace first.");
+      return;
+    }
+
+    setNarrativeLoading(true);
+    setError(null);
+    setStatus(null);
+
+    const token = await getAccessToken();
+    if (!token) {
+      setError("Sign in required.");
+      setNarrativeLoading(false);
+      return;
+    }
+
+    const response = await fetch(`/api/orgs/${selectedOrgId}/audit-narratives/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        controlId: controlFilter || undefined,
+        campaignId: campaignFilter || undefined,
+        window: 30,
+      }),
+    });
+
+    const body = (await response.json()) as
+      | { narrative: string }
+      | { error: { message: string } };
+
+    if (!response.ok) {
+      setError("error" in body ? body.error.message : "Failed to generate narrative.");
+      setNarrativeLoading(false);
+      return;
+    }
+
+    setNarrative((body as { narrative: string }).narrative);
+    setNarrativeLoading(false);
+  };
+
   const visibleEvidence = useMemo(() => (evidenceData?.items ?? []).slice(0, 50), [evidenceData]);
 
   if (!canView) {
@@ -500,6 +568,9 @@ export default function ControlsPage() {
                 {(((controlsData?.summary.coverageRatio ?? 0) * 100).toFixed(1))}%
               </strong>
             </p>
+            <p>
+              Benchmark cohort: <strong className="text-[var(--text-primary)]">{controlsData?.summary.benchmarkCohort ?? "mid_market_saas"}</strong>
+            </p>
           </div>
 
           <h4 className="mt-5 text-sm font-semibold text-[var(--text-primary)]">Evidence Status</h4>
@@ -533,6 +604,9 @@ export default function ControlsPage() {
                   <th>Framework</th>
                   <th>Mappings</th>
                   <th>Evidence</th>
+                  <th>Freshness</th>
+                  <th>Benchmark</th>
+                  <th>Interventions</th>
                   <th>Quick Map</th>
                 </tr>
               </thead>
@@ -561,6 +635,28 @@ export default function ControlsPage() {
                         <p>Synced: {control.evidence.synced}</p>
                         <p>Rejected: {control.evidence.rejected}</p>
                         <p>Stale: {control.evidence.stale}</p>
+                      </td>
+                      <td className="text-xs">
+                        <p className="capitalize font-medium">{control.freshness.state}</p>
+                        <p>Score: {control.freshness.score.toFixed(1)}</p>
+                        <p className="text-[var(--text-faint)]">
+                          Last: {formatDateTime(control.freshness.latestEvidenceAt ?? "")}
+                        </p>
+                      </td>
+                      <td className="text-xs">
+                        <p>
+                          Percentile:{" "}
+                          <strong>
+                            {control.benchmark.percentileRank === null
+                              ? "—"
+                              : `${control.benchmark.percentileRank.toFixed(0)}th`}
+                          </strong>
+                        </p>
+                        <p className="capitalize text-[var(--text-muted)]">{control.benchmark.band}</p>
+                      </td>
+                      <td className="text-xs">
+                        <p>Active: {control.intervention.activeCount}</p>
+                        <p className="capitalize">{control.intervention.latestStatus ?? "none"}</p>
                       </td>
                       <td>
                         <div className="grid gap-1.5 sm:grid-cols-[minmax(140px,1fr)_120px_auto_auto] sm:items-center">
@@ -619,7 +715,7 @@ export default function ControlsPage() {
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-5 py-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">Evidence Explorer</h2>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-4">
             <select
               className="h-9 rounded-lg border border-[var(--border)] bg-white px-2 text-sm"
               onChange={(event) => setControlFilter(event.target.value)}
@@ -657,6 +753,14 @@ export default function ControlsPage() {
                 </option>
               ))}
             </select>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void generateNarrative()}
+              type="button"
+            >
+              {narrativeLoading ? "Generating…" : "Generate Narrative"}
+            </button>
           </div>
         </div>
 
@@ -671,6 +775,7 @@ export default function ControlsPage() {
                   <th>Control</th>
                   <th>Type</th>
                   <th>Status</th>
+                  <th>Lineage</th>
                   <th>Latest Sync</th>
                 </tr>
               </thead>
@@ -686,6 +791,10 @@ export default function ControlsPage() {
                       <span className="status-pill status-pill-info capitalize">{item.status}</span>
                     </td>
                     <td className="text-xs">
+                      <p>Derived from: {item.lineage?.derivedFromEvidenceIds.length ?? 0}</p>
+                      <p>Supersedes: {item.lineage?.supersedesEvidenceIds.length ?? 0}</p>
+                    </td>
+                    <td className="text-xs">
                       {item.latestSyncEvent
                         ? `${item.latestSyncEvent.provider}: ${item.latestSyncEvent.status} (${formatDateTime(item.latestSyncEvent.createdAt)})`
                         : "Not synced yet"}
@@ -697,6 +806,15 @@ export default function ControlsPage() {
           </div>
         )}
       </div>
+
+      {narrative && (
+        <div className="card p-5">
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">Audit Narrative</h3>
+          <pre className="mt-3 whitespace-pre-wrap text-xs leading-5 text-[var(--text-muted)]">
+            {narrative}
+          </pre>
+        </div>
+      )}
 
       {!canManage && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--bg-muted)] px-4 py-3 text-xs text-[var(--text-muted)]">

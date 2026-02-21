@@ -7,10 +7,12 @@ import {
     BookOpen,
     ChevronDown,
     FileText,
+    GitBranch,
     LayoutDashboard,
     Link2,
     LogOut,
     Megaphone,
+    Sparkles,
     Shield,
 } from "lucide-react";
 
@@ -37,6 +39,8 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
     { href: "/product/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, minRole: "manager", section: "main" },
     { href: "/product/admin/policies", label: "Policies", icon: FileText, minRole: "manager", section: "main" },
+    { href: "/product/admin/adoption", label: "Adoption Center", icon: GitBranch, minRole: "manager", section: "main" },
+    { href: "/product/admin/interventions", label: "Interventions", icon: Sparkles, minRole: "manager", section: "main" },
     { href: "/product/admin/controls", label: "Controls & Evidence", icon: Shield, minRole: "manager", section: "main" },
     { href: "/product/admin/integrations", label: "Integrations", icon: Link2, minRole: "manager", section: "main" },
     { href: "/product/admin/campaigns", label: "Campaigns", icon: Megaphone, minRole: "admin", section: "main" },

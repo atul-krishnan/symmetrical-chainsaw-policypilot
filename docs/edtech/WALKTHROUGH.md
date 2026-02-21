@@ -14,9 +14,12 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Run migration in Supabase SQL editor:
+3. Run migrations in Supabase SQL editor (in this order):
 
 - `supabase/migrations/20260218_edtech_v1.sql`
+- `supabase/migrations/20260219_edtech_learning_flow_v2.sql`
+- `supabase/migrations/20260220_edtech_controls_integrations.sql`
+- `supabase/migrations/20260221_edtech_adoption_intelligence.sql`
 
 4. Start app:
 

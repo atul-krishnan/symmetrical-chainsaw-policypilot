@@ -69,6 +69,13 @@ type Campaign = {
       superseded: number;
     };
   };
+  controlImpactForecast?: {
+    totalMappedControls: number;
+    freshControls: number;
+    staleOrCriticalControls: number;
+    projectedFreshCoverageAfterPublish: number;
+    riskLabel: "low" | "medium" | "high";
+  };
 };
 
 type CampaignDetail = {
@@ -141,6 +148,13 @@ function normalizeCampaignDetail(input: CampaignDetail): CampaignDetail {
           stale: 0,
           superseded: 0,
         },
+      },
+      controlImpactForecast: input.campaign.controlImpactForecast ?? {
+        totalMappedControls: 0,
+        freshControls: 0,
+        staleOrCriticalControls: 0,
+        projectedFreshCoverageAfterPublish: 0,
+        riskLabel: "medium",
       },
     },
     modules: input.modules.map((module) => ({
@@ -694,7 +708,25 @@ export default function CampaignEditorPage() {
                         Stale evidence:{" "}
                         <strong>{campaign.controlMappingReadiness.evidenceStatusCounts.stale}</strong>
                       </span>
+                      <span>
+                        Projected fresh coverage after publish:{" "}
+                        <strong>
+                          {((campaign.controlImpactForecast?.projectedFreshCoverageAfterPublish ?? 0) * 100).toFixed(1)}%
+                        </strong>
+                      </span>
+                      <span>
+                        Forecast risk:{" "}
+                        <strong className="capitalize">
+                          {campaign.controlImpactForecast?.riskLabel ?? "medium"}
+                        </strong>
+                      </span>
                     </div>
+                    {(campaign.controlImpactForecast?.riskLabel === "high" ||
+                      (campaign.controlImpactForecast?.staleOrCriticalControls ?? 0) > 0) && (
+                      <p className="mt-2 rounded-md border border-[#ffd8a8] bg-[#fff7ec] px-2 py-1 text-[11px] text-[#9f5e10]">
+                        Stale-risk warning: mapped controls still have stale or critical evidence. Regenerate quizzes from final material and run intervention recommendations before publish.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

@@ -95,6 +95,56 @@ export const evidenceQuerySchema = z.object({
   status: z.enum(["queued", "synced", "rejected", "stale", "superseded"]).optional(),
 });
 
+export const adoptionWindowSchema = z.coerce.number().int().min(7).max(180).default(30);
+
+export const adoptionGraphQuerySchema = z.object({
+  controlId: z.string().uuid().optional(),
+  roleTrack: roleTrackSchema.optional(),
+  window: adoptionWindowSchema.optional(),
+});
+
+export const adoptionFreshnessQuerySchema = z.object({
+  window: adoptionWindowSchema.optional(),
+});
+
+export const interventionRecommendSchema = z
+  .object({
+    controlId: z.string().uuid().optional(),
+    campaignId: z.string().uuid().optional(),
+    moduleId: z.string().uuid().optional(),
+    maxRecommendations: z.number().int().min(1).max(200).default(25),
+  })
+  .default({
+    maxRecommendations: 25,
+  });
+
+export const interventionListQuerySchema = z.object({
+  status: z.enum(["proposed", "approved", "executing", "completed", "dismissed"]).optional(),
+  controlId: z.string().uuid().optional(),
+});
+
+export const interventionApproveSchema = z.object({
+  note: z.string().max(500).optional(),
+});
+
+export const interventionExecuteSchema = z.object({
+  idempotencyKey: z.string().min(8).max(120).optional(),
+});
+
+export const benchmarkQuerySchema = z.object({
+  metric: z
+    .enum(["control_freshness", "time_to_ack_hours", "stale_controls_ratio"])
+    .default("control_freshness"),
+  cohort: z.string().min(2).max(120).optional(),
+  window: adoptionWindowSchema.optional(),
+});
+
+export const auditNarrativeGenerateSchema = z.object({
+  controlId: z.string().uuid().optional(),
+  campaignId: z.string().uuid().optional(),
+  window: adoptionWindowSchema.optional(),
+});
+
 export const integrationConnectSchema = z.object({
   apiKey: z.string().min(8).max(300),
   accountId: z.string().min(2).max(120).optional(),
