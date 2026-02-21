@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+/output/preflight/
 
 # production
 /build
@@ -42,3 +43,6 @@ next-env.d.ts
 
 # supabase local tooling
 supabase/.temp/
+
+# Local Netlify folder
+.netlify

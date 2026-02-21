@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import fs from "node:fs";
 import path from "node:path";
 
 // Load .env.local first (Next.js convention), fall back to .env
@@ -21,6 +22,7 @@ type PreflightReport = {
   ok: boolean;
   startedAt: string;
   finishedAt: string;
+  reportPath: string | null;
   checks: CheckResult[];
 };
 
@@ -54,8 +56,140 @@ const REQUIRED_TABLES = [
   "benchmark_metric_snapshots",
 ];
 
+const STAGING_REQUIRED_ENV = [
+  "STAGING_SUPABASE_URL",
+  "STAGING_SUPABASE_ANON_KEY",
+  "STAGING_SUPABASE_SERVICE_ROLE_KEY",
+  "STAGING_APP_URL",
+  "STAGING_SMOKE_ACCESS_TOKEN",
+  "STAGING_SMOKE_ORG_ID",
+];
+
+const PILOT_REQUIRED_ENV = [
+  "PILOT_SUPABASE_URL",
+  "PILOT_SUPABASE_ANON_KEY",
+  "PILOT_SUPABASE_SERVICE_ROLE_KEY",
+  "PILOT_APP_URL",
+  "PILOT_SMOKE_ACCESS_TOKEN",
+  "PILOT_SMOKE_ORG_ID",
+];
+
 function readEnv(name: string): string {
   return process.env[name]?.trim() ?? "";
+}
+
+function isPlaceholderValue(value: string): boolean {
+  const normalized = value.toLowerCase();
+  const markers = [
+    "placeholder",
+    "example",
+    "changeme",
+    "replace-me",
+    "replace_me",
+    "your_",
+    "your-",
+    "todo",
+    "dummy",
+  ];
+
+  if (markers.some((marker) => normalized.includes(marker))) {
+    return true;
+  }
+
+  return /^https?:\/\/(www\.)?example\./.test(normalized);
+}
+
+function isLocalUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+  } catch {
+    return rawUrl.includes("localhost") || rawUrl.includes("127.0.0.1") || rawUrl.includes("0.0.0.0");
+  }
+}
+
+function runEnvMatrixCheck(name: string, requiredVars: string[]): CheckResult {
+  const missing = requiredVars.filter((envName) => !readEnv(envName));
+  const placeholders = requiredVars.filter((envName) => {
+    const value = readEnv(envName);
+    return value.length > 0 && isPlaceholderValue(value);
+  });
+
+  return {
+    name,
+    status: missing.length > 0 || placeholders.length > 0 ? "failed" : "passed",
+    details: {
+      missing,
+      placeholders,
+    },
+  };
+}
+
+function checkHostedStagingUrl(): CheckResult {
+  const appUrl = readEnv("STAGING_APP_URL");
+  if (!appUrl) {
+    return {
+      name: "staging_url_policy",
+      status: "failed",
+      details: {
+        reason: "Missing STAGING_APP_URL",
+      },
+    };
+  }
+
+  if (isLocalUrl(appUrl)) {
+    return {
+      name: "staging_url_policy",
+      status: "failed",
+      details: {
+        reason: "STAGING_APP_URL must be a hosted URL and cannot be localhost.",
+        appUrl,
+      },
+    };
+  }
+
+  return {
+    name: "staging_url_policy",
+    status: "passed",
+    details: {
+      appUrl,
+    },
+  };
+}
+
+function checkPlaceholderGuard(name: string, vars: string[]): CheckResult {
+  const flagged = vars
+    .map((envName) => ({ envName, value: readEnv(envName) }))
+    .filter((entry) => entry.value.length > 0 && isPlaceholderValue(entry.value))
+    .map((entry) => entry.envName);
+
+  return {
+    name,
+    status: flagged.length > 0 ? "failed" : "passed",
+    details: {
+      flagged,
+    },
+  };
+}
+
+function resolveReportPath(): string | null {
+  if (readEnv("PREFLIGHT_WRITE_REPORT").toLowerCase() === "false") {
+    return null;
+  }
+
+  const reportDir = readEnv("PREFLIGHT_REPORT_DIR") || path.join(process.cwd(), "output", "preflight");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return path.join(reportDir, `pilot-preflight-${timestamp}.json`);
+}
+
+function persistReport(reportPath: string | null, report: PreflightReport): void {
+  if (!reportPath) {
+    return;
+  }
+
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 }
 
 async function checkSupabaseTables(prefix: "STAGING" | "PILOT"): Promise<CheckResult> {
@@ -80,11 +214,13 @@ async function checkSupabaseTables(prefix: "STAGING" | "PILOT"): Promise<CheckRe
   });
 
   const missingTables: string[] = [];
+  const failures: Record<string, string> = {};
 
   for (const table of REQUIRED_TABLES) {
     const result = await supabase.from(table).select("id", { count: "exact", head: true }).limit(1);
     if (result.error) {
       missingTables.push(table);
+      failures[table] = result.error.message;
     }
   }
 
@@ -94,6 +230,7 @@ async function checkSupabaseTables(prefix: "STAGING" | "PILOT"): Promise<CheckRe
       status: "failed",
       details: {
         missingTables,
+        failures,
       },
     };
   }
@@ -172,39 +309,10 @@ async function main(): Promise<void> {
   const startedAt = new Date().toISOString();
   const checks: CheckResult[] = [];
 
-  const envMatrixChecks: Array<{ name: string; vars: string[]; required: boolean }> = [
-    {
-      name: "staging_env_matrix",
-      required: true,
-      vars: [
-        "STAGING_SUPABASE_URL",
-        "STAGING_SUPABASE_ANON_KEY",
-        "STAGING_SUPABASE_SERVICE_ROLE_KEY",
-        "STAGING_APP_URL",
-        "STAGING_SMOKE_ACCESS_TOKEN",
-      ],
-    },
-    {
-      name: "pilot_env_matrix",
-      required: true,
-      vars: [
-        "PILOT_SUPABASE_URL",
-        "PILOT_SUPABASE_ANON_KEY",
-        "PILOT_SUPABASE_SERVICE_ROLE_KEY",
-      ],
-    },
-  ];
-
-  for (const matrixCheck of envMatrixChecks) {
-    const missing = matrixCheck.vars.filter((name) => !readEnv(name));
-    checks.push({
-      name: matrixCheck.name,
-      status: missing.length > 0 ? (matrixCheck.required ? "failed" : "skipped") : "passed",
-      details: {
-        missing,
-      },
-    });
-  }
+  checks.push(runEnvMatrixCheck("staging_env_matrix", STAGING_REQUIRED_ENV));
+  checks.push(runEnvMatrixCheck("pilot_env_matrix", PILOT_REQUIRED_ENV));
+  checks.push(checkHostedStagingUrl());
+  checks.push(checkPlaceholderGuard("pilot_placeholder_guard", PILOT_REQUIRED_ENV));
 
   checks.push(await checkSupabaseTables("STAGING"));
   checks.push(await checkSupabaseTables("PILOT"));
@@ -221,14 +329,17 @@ async function main(): Promise<void> {
   });
 
   const ok = checks.every((check) => check.status !== "failed");
+  const reportPath = resolveReportPath();
 
   const report: PreflightReport = {
     ok,
     startedAt,
     finishedAt: new Date().toISOString(),
+    reportPath,
     checks,
   };
 
+  persistReport(reportPath, report);
   console.log(JSON.stringify(report, null, 2));
   if (!ok) {
     process.exitCode = 1;

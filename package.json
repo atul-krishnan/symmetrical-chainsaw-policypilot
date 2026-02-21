@@ -14,8 +14,10 @@
     "test:e2e:ci": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "seed": "tsx scripts/seed.ts",
+    "seed:demo-proof": "tsx scripts/seed-demo-proof-paths.ts",
     "backfill:learning-v2": "tsx scripts/backfill-learning-flow-v2.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
+    "smoke:token": "tsx scripts/generate-smoke-token.ts",
     "pilot:preflight": "tsx scripts/pilot-preflight.ts",
     "deploy:preview": "npx --yes vercel@50.18.2 --yes",
     "deploy:prod": "npx --yes vercel@50.18.2 --prod --yes"
@@ -39,6 +41,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.8",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

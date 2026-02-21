@@ -66,7 +66,9 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm run build`
 - `npm run test:e2e`
 - `npm run smoke:live`
+- `npm run smoke:token`
 - `npm run pilot:preflight`
+- `npm run seed:demo-proof`
 - `npm run deploy:preview`
 - `npm run deploy:prod`
 
@@ -76,6 +78,8 @@ Open [http://localhost:3000](http://localhost:3000).
 - Publish endpoint is replay-safe and returns success for already-published campaigns.
 - Policy upload validates MIME/extension consistency and sanitizes storage paths.
 - Request audit logs persist idempotency key hash metadata.
+- `pilot:preflight` enforces hosted staging URL policy and pilot placeholder-credential guards.
+- `pilot:preflight` writes archived reports to `output/preflight/` by default.
 
 ## Documentation
 
@@ -88,3 +92,4 @@ See `/docs/edtech`:
 - `OPERATIONS.md`
 - `DESIGN-SYSTEM.md`
 - `WALKTHROUGH.md`
+- `SALES-CALL-PACK.md`

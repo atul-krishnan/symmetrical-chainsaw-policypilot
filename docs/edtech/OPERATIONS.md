@@ -9,9 +9,9 @@
   - `STAGING_SUPABASE_URL`
   - `STAGING_SUPABASE_ANON_KEY`
   - `STAGING_SUPABASE_SERVICE_ROLE_KEY`
-  - `STAGING_APP_URL`
+  - `STAGING_APP_URL` (hosted URL only; no localhost)
   - `STAGING_SMOKE_ACCESS_TOKEN`
-  - Optional `STAGING_SMOKE_ORG_ID`
+  - `STAGING_SMOKE_ORG_ID`
 
 ### Pilot
 
@@ -20,10 +20,10 @@
   - `PILOT_SUPABASE_URL`
   - `PILOT_SUPABASE_ANON_KEY`
   - `PILOT_SUPABASE_SERVICE_ROLE_KEY`
-  - Optional `PILOT_APP_URL`
-  - Optional `PILOT_SMOKE_ACCESS_TOKEN`
-  - Optional `PILOT_SMOKE_ORG_ID`
-- Pilot smoke is manual gated via `RUN_PILOT_SMOKE=true`.
+  - `PILOT_APP_URL`
+  - `PILOT_SMOKE_ACCESS_TOKEN`
+  - `PILOT_SMOKE_ORG_ID`
+- Pilot smoke is enabled with `RUN_PILOT_SMOKE=true`.
 
 ## Release gates
 
@@ -40,9 +40,50 @@ npm run pilot:preflight
 `npm run pilot:preflight` returns machine-readable JSON and validates:
 
 - env matrix presence
+- hosted staging URL policy
+- placeholder credential guard for pilot env values
 - migration/table availability in staging and pilot Supabase
 - staging live smoke flow
 - optional pilot live smoke flow
+- report archive output at `output/preflight/pilot-preflight-*.json`
+
+## Security rotation runbook
+
+1. Revoke exposed Supabase PAT in Supabase account settings.
+2. Generate a new PAT and store it only in your secret manager.
+3. Rotate staging smoke token with:
+
+```bash
+npm run smoke:token -- --env staging --email <staging-user-email> --password <staging-user-password> --org-id <staging-org-id>
+```
+
+4. Rotate pilot smoke token with:
+
+```bash
+npm run smoke:token -- --env pilot --email <pilot-user-email> --password <pilot-user-password> --org-id <pilot-org-id>
+```
+
+5. Replace old tokens in deployment env vars and verify old tokens fail.
+
+## Pilot provisioning runbook
+
+1. Create or confirm the pilot Supabase project.
+2. Apply migrations in order:
+   - `supabase/migrations/20260218_edtech_v1.sql`
+   - `supabase/migrations/20260219_edtech_learning_flow_v2.sql`
+   - `supabase/migrations/20260220_edtech_controls_integrations.sql`
+   - `supabase/migrations/20260221_edtech_adoption_intelligence.sql`
+3. Reload PostgREST schema cache:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+4. Set pilot environment variables and run:
+
+```bash
+RUN_PILOT_SMOKE=true npm run pilot:preflight
+```
 
 ## Deployment flow (Vercel)
 
@@ -84,6 +125,14 @@ npm run deploy:prod
 8. CSV/PDF export headers + evidence checksum
 
 Script output is JSON for release automation.
+
+## Demo proof-path seeding
+
+Use this script to prepare a deterministic showcase scenario (stale control + intervention recommendation + evidence lineage):
+
+```bash
+npm run seed:demo-proof
+```
 
 ## Runbooks
 

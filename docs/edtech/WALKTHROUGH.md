@@ -93,4 +93,19 @@ npm run test:e2e:ci
 npm run pilot:preflight
 ```
 
-`pilot:preflight` verifies env matrix, migration state, and smoke checks.
+`pilot:preflight` verifies env matrix, hosted staging URL policy, migration state, and smoke checks.
+Reports are archived to `output/preflight/`.
+
+Run pilot smoke gate when pilot env is ready:
+
+```bash
+RUN_PILOT_SMOKE=true npm run pilot:preflight
+```
+
+## 8. Smoke token refresh
+
+Use this before release demos whenever auth drift is suspected:
+
+```bash
+npm run smoke:token -- --env staging --email <email> --password <password> --org-id <org-id>
+```

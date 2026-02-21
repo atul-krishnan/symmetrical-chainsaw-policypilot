@@ -262,6 +262,18 @@ export default function AdoptionCommandCenterPage() {
         </div>
       )}
 
+      <div className="card p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">
+            Animated Policy Videos
+          </h2>
+          <span className="status-pill status-pill-info">Coming Soon</span>
+        </div>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          We are working on role-specific animated explainers generated from approved module content to improve adoption and retention.
+        </p>
+      </div>
+
       <div className="card overflow-hidden">
         <div className="flex items-center gap-2 border-b border-[var(--border)] px-5 py-4">
           <TrendingUp className="h-4 w-4 text-[var(--accent)]" />
